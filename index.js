@@ -1,19 +1,21 @@
-var inherits = require('util').inherits;
-var Service, Characteristic;
-var request = require('request');
-var FakeGatoHistoryService = require('fakegato-history');
+
+const inherits = require('util').inherits;
+const request = require('request');
 const version = require('./package.json').version;
 
-module.exports = function (homebridge) {
-	Service = homebridge.hap.Service;
-	Characteristic = homebridge.hap.Characteristic;
-	Accessory = homebridge.platformAccessory;
-	UUIDGen = homebridge.hap.uuid;
-	FakeGatoHistoryService = require('fakegato-history')(homebridge);
-	homebridge.registerAccessory("homebridge-3em-energy-meter", "3EMEnergyMeter", EnergyMeter);
-}
+let Service, Characteristic, FakeGatoHistoryService;
 
-function EnergyMeter (log, config) {
+module.exports = (api) => {
+  api.registerAccessory('3EMEnergyMeter', EnergyMeter);
+};
+
+
+function EnergyMeter(log, config, api) {
+	// Homebridge 2.0: get hap and Service/Characteristic from api
+	Service = api.hap.Service;
+	Characteristic = api.hap.Characteristic;
+	FakeGatoHistoryService = require('fakegato-history')(api);
+
 	this.log = log;
 	this.ip = config["ip"] || "127.0.0.1";
 	this.url = "http://" + this.ip + "/status/emeters?";
@@ -24,8 +26,8 @@ function EnergyMeter (log, config) {
 	this.http_method = "GET";
 	this.update_interval = Number(config["update_interval"] || 10000);
 	this.use_em = config["use_em"] || false;
-	this.use_em_mode = config["use_em_mode"] || 0; 
-	this.negative_handling_mode = config["negative_handling_mode"] || 0; 	
+	this.use_em_mode = config["use_em_mode"] || 0;
+	this.negative_handling_mode = config["negative_handling_mode"] || 0;
 	this.use_pf = config["use_pf"] || false;
 	this.debug_log = config["debug_log"] || false;
 	this.serial = config.serial || "9000000";
@@ -105,7 +107,7 @@ function EnergyMeter (log, config) {
 		this.addCharacteristic(EvePowerConsumption);
 		this.addOptionalCharacteristic(EveTotalConsumption);
 		this.addOptionalCharacteristic(EveVoltage1);
-    this.addOptionalCharacteristic(EveAmpere1);
+		this.addOptionalCharacteristic(EveAmpere1);
 	};
 	PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
 	inherits(PowerMeterService, Service);
@@ -114,25 +116,25 @@ function EnergyMeter (log, config) {
 	this._EvePowerConsumption = EvePowerConsumption;
 	this._EveTotalConsumption = EveTotalConsumption;
 	this._EveVoltage1 = EveVoltage1;
-  this._EveAmpere1 = EveAmpere1;
+	this._EveAmpere1 = EveAmpere1;
 
-  // info
-  this.informationService = new Service.AccessoryInformation();
+	// info
+	this.informationService = new Service.AccessoryInformation();
 	this.informationService
-			.setCharacteristic(Characteristic.Manufacturer, "Shelly - produdegr")
-			.setCharacteristic(Characteristic.Model, "Shelly 3EM")
-			.setCharacteristic(Characteristic.FirmwareRevision, version)
-			.setCharacteristic(Characteristic.SerialNumber, this.serial);
+		.setCharacteristic(Characteristic.Manufacturer, "Shelly - produdegr")
+		.setCharacteristic(Characteristic.Model, "Shelly 3EM")
+		.setCharacteristic(Characteristic.FirmwareRevision, version)
+		.setCharacteristic(Characteristic.SerialNumber, this.serial);
 
 	// construct service
 	this.service = new PowerMeterService(this.name);
 	this.service.getCharacteristic(this._EvePowerConsumption).on('get', this.getPowerConsumption.bind(this));
 	this.service.addCharacteristic(this._EveTotalConsumption).on('get', this.getTotalConsumption.bind(this));
-  this.service.addCharacteristic(this._EveVoltage1).on('get', this.getVoltage1.bind(this));
-  this.service.addCharacteristic(this._EveAmpere1).on('get', this.getAmpere1.bind(this));
+	this.service.addCharacteristic(this._EveVoltage1).on('get', this.getVoltage1.bind(this));
+	this.service.addCharacteristic(this._EveAmpere1).on('get', this.getAmpere1.bind(this));
 
-  // add fakegato
-  this.historyService = new FakeGatoHistoryService("energy", this,{storage:'fs'});
+	// add fakegato
+	this.historyService = new FakeGatoHistoryService("energy", this, { storage: 'fs' });
 }
 
 EnergyMeter.prototype.updateState = function () {
