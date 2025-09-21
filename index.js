@@ -168,6 +168,35 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 	const opsBase = { uri: 'http://' + (this.config.ip || '127.0.0.1') + '/status/emeters?', method: 'GET', timeout: Number(this.config.timeout || 5000) };
 	const self = this;
 
+	// If we're splitting channels, try to remove the original combined accessory (if present)
+	try {
+		const PLUGIN_NAME = require('./package.json').name || 'homebridge-3em-energy-meter';
+		const PLATFORM_NAME = '3EMEnergyMeterPlatform';
+		const toRemove = [];
+		if (this.cachedAccessories) {
+			Object.keys(this.cachedAccessories).forEach(uuid => {
+				const acc = this.cachedAccessories[uuid];
+				try {
+					// Remove accessories whose displayName matches the base name or the energy service name
+					if (acc && acc.displayName) {
+						if (acc.displayName === baseName || acc.displayName === (baseName + ' Energy')) {
+							if (this.config && this.config.debug_log) this.log('ThreeEmPlatform: scheduling cached legacy accessory for removal: ' + acc.displayName + ' (UUID=' + acc.UUID + ')');
+							toRemove.push(acc);
+						}
+					}
+				} catch (e) { /* ignore per-accessory errors */ }
+			});
+		}
+		if (toRemove.length > 0 && this.api && this.api.unregisterPlatformAccessories) {
+			try {
+				this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRemove);
+				if (this.log) this.log('ThreeEmPlatform: unregistered ' + toRemove.length + ' legacy accessory(ies) to avoid duplicates');
+			} catch (e) {
+				this.log('ThreeEmPlatform: failed to unregister legacy accessories: ' + e.message);
+			}
+		}
+	} catch (e) { if (this.log) this.log('ThreeEmPlatform: legacy removal check failed: ' + e.message); }
+
 	// store created platform accessories so the shared poller can update them
 	this.platformAccessories = this.platformAccessories || [];
 
