@@ -60,7 +60,102 @@ module.exports = (api) => {
 	}
 	EveVoltage = EveVoltageClass;
 
+	// Register both the main accessory and an energy-only accessory type.
 	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
+	api.registerAccessory('3EMEnergyMeterEnergy', EnergyOnly);
+};
+
+// Energy-only accessory: exposes Eve energy characteristics and FakeGato history only.
+function EnergyOnly(log, config, api) {
+	this.log = log;
+	this.ip = config["ip"] || "127.0.0.1";
+	this.url = "http://" + this.ip + "/status/emeters?";
+	this.auth = config["auth"];
+	this.name = config["name"] || ("Energy " + this.ip);
+	this.timeout = config["timeout"] || 5000;
+	this.http_method = "GET";
+	this.update_interval = Number(config["update_interval"] || 10000);
+	this.debug_log = config["debug_log"] || false;
+
+	this.powerConsumption = 0;
+	this.totalPowerConsumption = 0;
+	this.voltage1 = 0;
+
+	// Create services
+	this.informationService = new Service.AccessoryInformation();
+	this.informationService
+		.setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+		.setCharacteristic(Characteristic.Model, '3EM-energy-only')
+		.setCharacteristic(Characteristic.SerialNumber, config.serial || 'unknown')
+		.setCharacteristic(Characteristic.FirmwareRevision, version || '1.0.0');
+
+	this.service = new Service.Lightbulb(this.name);
+
+	// Add Eve custom characteristics
+	try {
+		this.service.addCharacteristic(EvePowerConsumption);
+		this.service.addCharacteristic(EveTotalConsumption);
+		this.service.addCharacteristic(EveVoltage);
+		this.evePowerChar = this.service.getCharacteristic(EvePowerConsumption);
+		this.eveTotalChar = this.service.getCharacteristic(EveTotalConsumption);
+		this.eveVoltageChar = this.service.getCharacteristic(EveVoltage);
+		if (this.debug_log) this.log('EnergyOnly: added Eve characteristics');
+	} catch (e) {
+		this.log('EnergyOnly: failed to add Eve characteristics: ' + e.message);
+		this.evePowerChar = null; this.eveTotalChar = null; this.eveVoltageChar = null;
+	}
+
+	this.historyService = new FakeGatoHistoryService('energy', this);
+
+	// Polling
+	setInterval(() => { this.updateState && this.updateState(); }, this.update_interval);
+	try { this.updateState && this.updateState(); } catch (e) { this.log('EnergyOnly initial poll failed: ' + e.message); }
+}
+
+EnergyOnly.prototype.getServices = function() {
+	return [this.informationService, this.service, this.historyService];
+};
+
+EnergyOnly.prototype.updateState = function() {
+	const ops = { uri: this.url, method: this.http_method, timeout: this.timeout };
+	if (this.auth) ops.auth = { user: this.auth.user, pass: this.auth.pass };
+	if (this.debug_log) this.log('EnergyOnly: requesting ' + this.url);
+	request(ops, (error, res, body) => {
+		if (error) { this.log('EnergyOnly Bad http response: ' + error.message); return; }
+		try {
+			const json = JSON.parse(body);
+			// Aggregate emeters
+			this.powerConsumption = 0;
+			this.totalPowerConsumption = 0;
+			this.voltage1 = 0;
+			if (Array.isArray(json.emeters) && json.emeters.length > 0) {
+				for (let i = 0; i < json.emeters.length; i++) {
+					this.powerConsumption += parseFloat(json.emeters[i].power || 0);
+					this.totalPowerConsumption += parseFloat(json.emeters[i].total || 0);
+					this.voltage1 += parseFloat(json.emeters[i].voltage || 0);
+				}
+				this.totalPowerConsumption = this.totalPowerConsumption / 1000; // to kWh
+				this.voltage1 = this.voltage1 / json.emeters.length;
+			}
+
+			if (this.debug_log) this.log('EnergyOnly successful: power=' + this.powerConsumption + ' total=' + this.totalPowerConsumption + ' V=' + this.voltage1);
+
+			if (this.service) {
+				try {
+					if (this.evePowerChar) { this.service.updateCharacteristic(this.evePowerChar, Math.round(this.powerConsumption)); this.evePowerChar.setValue(Math.round(this.powerConsumption)); }
+					if (this.eveTotalChar) { this.service.updateCharacteristic(this.eveTotalChar, Number(this.totalPowerConsumption)); this.eveTotalChar.setValue(Number(this.totalPowerConsumption)); }
+					if (this.eveVoltageChar) { this.service.updateCharacteristic(this.eveVoltageChar, Number(this.voltage1)); this.eveVoltageChar.setValue(Number(this.voltage1)); }
+				} catch (e) { this.log('EnergyOnly char update error: ' + e.message); }
+			}
+
+			if (this.historyService) {
+				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
+				if (this.debug_log) this.log('EnergyOnly FakeGato addEntry power=' + this.powerConsumption);
+			}
+		} catch (e) {
+			this.log('EnergyOnly parse error: ' + e.message);
+		}
+	});
 };
 
 function EnergyMeter(log, config, api) {
