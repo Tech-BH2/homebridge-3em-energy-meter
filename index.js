@@ -14,6 +14,19 @@ module.exports = (api) => {
 };
 
 function EnergyMeter(log, config, api) {
+// ...existing constructor code...
+}
+
+EnergyMeter.prototype.getServices = function() {
+	// Create the main Outlet service
+	this.service = new Service.Outlet(this.name);
+	// Optionally add characteristics here (CurrentConsumption, Voltage, etc.)
+
+	// Create the FakeGato history service
+	this.historyService = new FakeGatoHistoryService('energy', this);
+
+	return [this.service, this.historyService];
+};
 	this.log = log;
 	this.ip = config["ip"] || "127.0.0.1";
 	this.url = "http://" + this.ip + "/status/emeters?";
