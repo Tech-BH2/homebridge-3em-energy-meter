@@ -192,6 +192,20 @@ EnergyMeter.prototype.updateState = function() {
 			this.waiting_response = false;
 			return;
 		}
+
+				// Debug: log HTTP response status and a truncated body to help map JSON fields
+				if (this.debug_log) {
+					try {
+						this.log('HTTP ' + ops.method + ' ' + ops.uri + ' -> ' + (res && res.statusCode));
+						let bodyString = (typeof body === 'string') ? body : (body && body.toString ? body.toString() : JSON.stringify(body));
+						if (bodyString && bodyString.length > 2000) {
+							bodyString = bodyString.substring(0, 2000) + '... (truncated)';
+						}
+						this.log('Response body: ' + bodyString);
+					} catch (e) {
+						this.log('Failed to log response body: ' + e.message);
+					}
+				}
 		try {
 			const json = JSON.parse(body);
 			// Power factor
@@ -304,20 +318,20 @@ EnergyMeter.prototype.updateState = function() {
 
 				// Update Eve custom characteristics if present so apps like Eve treat this as an energy meter
 				try {
-					if (this.service.getCharacteristic(EvePowerConsumption)) {
-						this.service.getCharacteristic(EvePowerConsumption)
-							.setValue(Math.round(this.powerConsumption));
+					if (this.evePowerChar) {
+						this.evePowerChar.setValue(Math.round(this.powerConsumption));
+						if (this.debug_log) this.log('Set EvePowerConsumption=' + Math.round(this.powerConsumption));
 					}
-					if (this.service.getCharacteristic(EveTotalConsumption)) {
-						this.service.getCharacteristic(EveTotalConsumption)
-							.setValue(Number(this.totalPowerConsumption));
+					if (this.eveTotalChar) {
+						this.eveTotalChar.setValue(Number(this.totalPowerConsumption));
+						if (this.debug_log) this.log('Set EveTotalConsumption=' + Number(this.totalPowerConsumption));
 					}
-					if (this.service.getCharacteristic(EveVoltage)) {
-						this.service.getCharacteristic(EveVoltage)
-							.setValue(Number(this.voltage1));
+					if (this.eveVoltageChar) {
+						this.eveVoltageChar.setValue(Number(this.voltage1));
+						if (this.debug_log) this.log('Set EveVoltage=' + Number(this.voltage1));
 					}
 				} catch (e) {
-					// ignore if custom characteristics are not available
+					this.log('Error updating Eve characteristics: ' + e.message);
 				}
 			}
 			// FakeGato
