@@ -15,7 +15,6 @@ module.exports = (api) => {
 
 function EnergyMeter(log, config, api) {
 // ...existing constructor code...
-}
 
 EnergyMeter.prototype.getServices = function() {
 	// Create the main Outlet service
@@ -50,6 +49,188 @@ EnergyMeter.prototype.getServices = function() {
 	this.voltage1 = 0;
 	this.ampere1 = 0;
 	this.pf0 = 1;
-       this.pf1 = 1;
+	this.pf1 = 1;
 	this.pf2 = 1;
+
+	// Set up polling interval for state updates
+	setInterval(() => {
+		this.updateState && this.updateState();
+	}, this.update_interval);
 }
+
+EnergyMeter.prototype.getServices = function() {
+	// Create the main Outlet service
+	this.service = new Service.Outlet(this.name);
+	// Add standard characteristics
+	this.service.getCharacteristic(Characteristic.On)
+		.on('get', callback => callback(null, this.powerConsumption > 0));
+	this.service.getCharacteristic(Characteristic.OutletInUse)
+		.on('get', callback => callback(null, this.powerConsumption > 0));
+
+	// Optionally add custom characteristics if available in your Homebridge version
+	if (Characteristic.CurrentConsumption) {
+		this.service.addCharacteristic(Characteristic.CurrentConsumption);
+	}
+	if (Characteristic.TotalConsumption) {
+		this.service.addCharacteristic(Characteristic.TotalConsumption);
+	}
+	if (Characteristic.Voltage) {
+		this.service.addCharacteristic(Characteristic.Voltage);
+	}
+	if (Characteristic.Current) {
+		this.service.addCharacteristic(Characteristic.Current);
+	}
+
+	// Create the FakeGato history service
+	this.historyService = new FakeGatoHistoryService('energy', this);
+
+	return [this.service, this.historyService];
+};
+
+EnergyMeter.prototype.updateState = function() {
+	// Poll Shelly 3EM for data and update HomeKit characteristics
+	if (this.waiting_response) {
+		this.log('Please select a higher update_interval value. Http command may not finish!');
+		return;
+	}
+	this.waiting_response = true;
+	const ops = {
+		uri: this.url,
+		method: this.http_method,
+		timeout: this.timeout
+	};
+	if (this.debug_log) {
+		this.log('Requesting energy values from Shelly 3EM(EM) ...');
+	}
+	if (this.auth) {
+		ops.auth = {
+			user: this.auth.user,
+			pass: this.auth.pass
+		};
+	}
+	request(ops, (error, res, body) => {
+		if (error) {
+			this.log('Bad http response! (' + ops.uri + '): ' + error.message);
+			this.waiting_response = false;
+			return;
+		}
+		try {
+			const json = JSON.parse(body);
+			// Power factor
+			if ((this.use_pf) && (this.use_em == false)) {
+				this.pf0 = parseFloat(json.emeters[0].pf);
+				this.pf1 = parseFloat(json.emeters[1].pf);
+				this.pf2 = parseFloat(json.emeters[2].pf);
+			} else {
+				this.pf0 = 1;
+				this.pf1 = 1;
+				this.pf2 = 1;
+			}
+			// Main measurement logic
+			if (this.use_em) {
+				if (this.use_em_mode == 0) {
+					if (this.negative_handling_mode == 0) {
+						this.powerConsumption = (parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power));
+						this.totalPowerConsumption = ((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total)) / 1000);
+						this.voltage1 = (((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage)) / 2));
+						this.ampere1 = ((this.powerConsumption / this.voltage1));
+						if (this.powerConsumption < 0) { this.powerConsumption = 0; }
+						if (this.totalPowerConsumption < 0) { this.totalPowerConsumption = 0; }
+						if (this.voltage1 < 0) { this.voltage1 = 0; }
+						if (this.ampere1 < 0) { this.ampere1 = 0; }
+					} else if (this.negative_handling_mode == 1) {
+						this.powerConsumption = Math.abs(parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power));
+						this.totalPowerConsumption = Math.abs((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total)) / 1000);
+						this.voltage1 = Math.abs(((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage)) / 2));
+						this.ampere1 = Math.abs((this.powerConsumption / this.voltage1));
+					}
+				} else if (this.use_em_mode == 1) {
+					if (this.negative_handling_mode == 0) {
+						this.powerConsumption = (parseFloat(json.emeters[0].power));
+						this.totalPowerConsumption = (parseFloat(json.emeters[0].total) / 1000);
+						this.voltage1 = (parseFloat(json.emeters[0].voltage));
+						this.ampere1 = ((this.powerConsumption / this.voltage1));
+						if (this.powerConsumption < 0) { this.powerConsumption = 0; }
+						if (this.totalPowerConsumption < 0) { this.totalPowerConsumption = 0; }
+						if (this.voltage1 < 0) { this.voltage1 = 0; }
+						if (this.ampere1 < 0) { this.ampere1 = 0; }
+					} else if (this.negative_handling_mode == 1) {
+						this.powerConsumption = Math.abs(parseFloat(json.emeters[0].power));
+						this.totalPowerConsumption = Math.abs(parseFloat(json.emeters[0].total) / 1000);
+						this.voltage1 = Math.abs(parseFloat(json.emeters[0].voltage));
+						this.ampere1 = Math.abs((this.powerConsumption / this.voltage1));
+					}
+				} else if (this.use_em_mode == 2) {
+					if (this.negative_handling_mode == 0) {
+						this.powerConsumption = (parseFloat(json.emeters[1].power));
+						this.totalPowerConsumption = (parseFloat(json.emeters[1].total) / 1000);
+						this.voltage1 = (parseFloat(json.emeters[1].voltage));
+						this.ampere1 = ((this.powerConsumption / this.voltage1));
+						if (this.powerConsumption < 0) { this.powerConsumption = 0; }
+						if (this.totalPowerConsumption < 0) { this.totalPowerConsumption = 0; }
+						if (this.voltage1 < 0) { this.voltage1 = 0; }
+						if (this.ampere1 < 0) { this.ampere1 = 0; }
+					} else if (this.negative_handling_mode == 1) {
+						this.powerConsumption = Math.abs(parseFloat(json.emeters[1].power));
+						this.totalPowerConsumption = Math.abs(parseFloat(json.emeters[1].total) / 1000);
+						this.voltage1 = Math.abs(parseFloat(json.emeters[1].voltage));
+						this.ampere1 = Math.abs((this.powerConsumption / this.voltage1));
+					}
+				}
+			} else {
+				if (this.negative_handling_mode == 0) {
+					this.powerConsumption = (parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power) + parseFloat(json.emeters[2].power));
+					this.totalPowerConsumption = ((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total) + parseFloat(json.emeters[2].total)) / 1000);
+					this.voltage1 = (((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage) + parseFloat(json.emeters[2].voltage)) / 3));
+					this.ampere1 = (((parseFloat(json.emeters[0].current) * this.pf0)
+						+ (parseFloat(json.emeters[1].current) * this.pf1)
+						+ (parseFloat(json.emeters[2].current) * this.pf2)));
+					if (this.powerConsumption < 0) { this.powerConsumption = 0; }
+					if (this.totalPowerConsumption < 0) { this.totalPowerConsumption = 0; }
+					if (this.voltage1 < 0) { this.voltage1 = 0; }
+					if (this.ampere1 < 0) { this.ampere1 = 0; }
+				} else if (this.negative_handling_mode == 1) {
+					this.powerConsumption = Math.abs(parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power) + parseFloat(json.emeters[2].power));
+					this.totalPowerConsumption = Math.abs((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total) + parseFloat(json.emeters[2].total)) / 1000);
+					this.voltage1 = Math.abs(((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage) + parseFloat(json.emeters[2].voltage)) / 3));
+					this.ampere1 = Math.abs(((parseFloat(json.emeters[0].current) * this.pf0)
+						+ (parseFloat(json.emeters[1].current) * this.pf1)
+						+ (parseFloat(json.emeters[2].current) * this.pf2)));
+				}
+			}
+			if (this.debug_log) {
+				this.log('Successful http response. [ voltage: ' + this.voltage1.toFixed(0) + 'V, current: ' + this.ampere1.toFixed(1) + 'A, consumption: ' + this.powerConsumption.toFixed(0) + 'W, total consumption: ' + this.totalPowerConsumption.toFixed(2) + 'kWh ]');
+			}
+			// Update HomeKit characteristics
+			if (this.service) {
+				if (this.service.getCharacteristic(Characteristic.CurrentConsumption)) {
+					this.service.getCharacteristic(Characteristic.CurrentConsumption)
+						.setValue(this.powerConsumption, undefined, undefined);
+				}
+				if (this.service.getCharacteristic(Characteristic.TotalConsumption)) {
+					this.service.getCharacteristic(Characteristic.TotalConsumption)
+						.setValue(this.totalPowerConsumption, undefined, undefined);
+				}
+				if (this.service.getCharacteristic(Characteristic.Voltage)) {
+					this.service.getCharacteristic(Characteristic.Voltage)
+						.setValue(this.voltage1, undefined, undefined);
+				}
+				if (this.service.getCharacteristic(Characteristic.Current)) {
+					this.service.getCharacteristic(Characteristic.Current)
+						.setValue(this.ampere1, undefined, undefined);
+				}
+				this.service.getCharacteristic(Characteristic.On)
+					.setValue(this.powerConsumption > 0);
+				this.service.getCharacteristic(Characteristic.OutletInUse)
+					.setValue(this.powerConsumption > 0);
+			}
+			// FakeGato
+			if (this.historyService) {
+				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
+			}
+		} catch (parseErr) {
+			this.log('Error processing data: ' + parseErr.message);
+		}
+		this.waiting_response = false;
+	});
+};
