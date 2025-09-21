@@ -6,8 +6,7 @@ const version = require('./package.json').version;
 let Service, Characteristic, FakeGatoHistoryService;
 
 module.exports = (api) => {
-  api.registerAccessory('3EMEnergyMeter', EnergyMeter);
-
+	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
 
 
 function EnergyMeter(log, config, api) {
@@ -226,4 +225,4 @@ function EnergyMeter(log, config, api) {
 			}
 		this.waiting_response = false;
 	});
-};
+
