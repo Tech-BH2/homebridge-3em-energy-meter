@@ -35,6 +35,18 @@
       "description": "The password for the Shelly 3EM device (if authentication is enabled).",
       "default": "admin"
     },
+    "use_em": {
+      "type": "boolean",
+      "title": "Enable Energy Monitoring",
+      "description": "Enable energy monitoring on the Shelly 3EM device.",
+      "default": true
+    },
+    "split_channels": {
+      "type": "boolean",
+      "title": "Split Channels",
+      "description": "Treat each channel as a separate accessory in HomeKit.",
+      "default": true
+    },
     "channels": {
       "type": "array",
       "title": "Channels",
