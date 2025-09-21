@@ -232,7 +232,15 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 		// If accessory already cached, skip creation
 		if (this.config && this.config.debug_log) this.log('ThreeEmPlatform: preparing to create accessory for channel ' + channelIndex + ' with uuidSeed=' + uuidSeed + ' uuid=' + uuid);
 		if (this.cachedAccessories && this.cachedAccessories[uuid]) {
-			this.log('ThreeEmPlatform: channel accessory already configured (UUID=' + uuid + '), skipping creation.');
+			this.log('ThreeEmPlatform: channel accessory already configured (UUID=' + uuid + '), attaching to platform poller.');
+			try {
+				const acc = this.cachedAccessories[uuid];
+				// Try to find the Lightbulb service used to expose Eve characteristics
+				const light = acc.getService && (acc.getService(this.Service.Lightbulb) || acc.getService('Lightbulb'));
+				this.platformAccessories.push({ accessory: acc, channelIndex: channelIndex, lightService: light });
+			} catch (e) {
+				if (this.log) this.log('ThreeEmPlatform: failed to attach cached accessory to poller: ' + e.message);
+			}
 			return;
 		}
 
