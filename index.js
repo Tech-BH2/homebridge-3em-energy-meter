@@ -83,8 +83,39 @@ function ThreeEmPlatform(log, config, api) {
 	// cache of configured accessories restored by Homebridge
 	this.cachedAccessories = {};
 
+	try {
+		if (this.log) this.log('ThreeEmPlatform: constructor called; split_channels=' + !!(this.config && this.config.split_channels) + ', use_em=' + !!(this.config && this.config.use_em));
+	} catch (e) {}
+
 	if (api && api.on) {
 		api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
+		if (this.log) this.log('ThreeEmPlatform: didFinishLaunching handler registered');
+	} else {
+		if (this.log) this.log('ThreeEmPlatform: api.on not available; didFinishLaunching will not be bound');
+	}
+
+	// Optionally create and register a child bridge for easier troubleshooting
+	if (this.config && this.config.create_child_bridge) {
+		try {
+			const BRIDGE_NAME = (this.config.name || '3EM Child Bridge') + ' Child Bridge';
+			const bridgeUUID = api.hap.uuid.generate((this.config.serial || '3em') + '-child-bridge');
+			const bridgeAccessory = new api.platformAccessory(BRIDGE_NAME, bridgeUUID);
+			// Add basic information service
+			const info = bridgeAccessory.getService(this.Service.AccessoryInformation) || bridgeAccessory.addService(this.Service.AccessoryInformation);
+			info.setCharacteristic(this.Characteristic.Manufacturer, 'Shelly')
+				.setCharacteristic(this.Characteristic.Model, '3EM-child-bridge')
+				.setCharacteristic(this.Characteristic.SerialNumber, this.config.serial || 'unknown')
+				.setCharacteristic(this.Characteristic.FirmwareRevision, version || '1.0.0');
+			// Add a Bridge service (some HAP versions accept Bridge; otherwise AccessoryInformation is enough)
+			try { bridgeAccessory.addService(this.Service.Bridge); } catch (e) { /* ignore if not supported */ }
+			// Register the accessory
+			const PLUGIN_NAME = require('./package.json').name || 'homebridge-3em-energy-meter';
+			const PLATFORM_NAME = '3EMEnergyMeterPlatform';
+			api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [bridgeAccessory]);
+			if (this.log) this.log('ThreeEmPlatform: created and registered child bridge accessory: ' + BRIDGE_NAME + ' (UUID=' + bridgeUUID + ')');
+		} catch (e) {
+			if (this.log) this.log('ThreeEmPlatform: failed to create child bridge: ' + e.message);
+		}
 	}
 }
 
