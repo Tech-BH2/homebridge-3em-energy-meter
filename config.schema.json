@@ -1,6 +1,6 @@
 {
   "pluginAlias": "3EMEnergyMeter",
-  "pluginType": "accessory",
+  "pluginType": "platform",
   "singular": true,
   "headerDisplay": "Shelly 3EM Energy Meter Plugin",
   "footerDisplay": "This accessory will only be supported in the third-party Homekit app EVE.",
@@ -100,13 +100,13 @@
   "description": "This toggle enables channel helper options below. Note: Homebridge Config UI cannot auto-create separate accessory instances from a single accessory plugin entry; enabling this will show helper options and example config snippets so you can quickly add channel accessories manually."
   },
   "channel": {
-  "title": "Channel for the additional accessory",
+  "title": "Channel (legacy single accessory fallback)",
   "type": "integer",
   "default": 2,
   "required": false,
   "minimum": 1,
   "maximum": 3,
-  "description": "Select the emeter channel to expose in the additional accessory (1-based). Leave at 2 to expose channel 2. This field is used in the example config snippet only."
+  "description": "Legacy single-channel selector used when no explicit channel checkboxes are selected. Prefer checking the individual channel boxes below to create multiple channel accessories."
   },
   "expose_channel_1": {
   "title": "Expose channel 1 accessory helper",

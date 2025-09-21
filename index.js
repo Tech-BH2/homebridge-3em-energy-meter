@@ -98,106 +98,123 @@ ThreeEmPlatform.prototype.configureAccessory = function(accessory) {
 };
 
 ThreeEmPlatform.prototype.didFinishLaunching = function() {
-	// Only create the auto accessory if the UI option is enabled
+	// Only create auto accessories if the UI option is enabled
 	if (!this.config || !this.config.add_channel_accessory) {
 		if (this.log) this.log('ThreeEmPlatform: auto-create disabled (add_channel_accessory=false)');
 		return;
 	}
 
-	const channel = Number(this.config.channel || 2);
-	const channelIndex = Math.max(1, Math.min(3, channel)) - 1; // 0-based
+	// Determine which channels to create based on explicit checkboxes. If none are selected, fall back to the legacy `channel` field.
+	const channelsToCreate = [];
+	if (this.config.expose_channel_1) channelsToCreate.push(0);
+	if (this.config.expose_channel_2) channelsToCreate.push(1);
+	if (this.config.expose_channel_3) channelsToCreate.push(2);
+	if (channelsToCreate.length === 0 && this.config.channel) {
+		const single = Math.max(1, Math.min(3, Number(this.config.channel || 2))) - 1;
+		channelsToCreate.push(single);
+	}
+
+	if (channelsToCreate.length === 0) {
+		if (this.log) this.log('ThreeEmPlatform: no channels selected for auto-creation');
+		return;
+	}
+
 	const serial = this.config.serial || 'unknown-3em';
-	const uuidSeed = serial + '-ch' + channelIndex;
-	const uuid = this.api.hap.uuid.generate(uuidSeed);
-
-	// If accessory already cached, skip creation
-	if (this.cachedAccessories && this.cachedAccessories[uuid]) {
-		this.log('ThreeEmPlatform: channel accessory already configured (UUID=' + uuid + '), skipping creation.');
-		return;
-	}
-
-	const name = (this.config.name || 'Shelly 3EM') + ' - Channel ' + (channelIndex + 1);
-	const accessory = new this.api.platformAccessory(name, uuid);
-
-	// Information service
-	const info = accessory.getService(this.Service.AccessoryInformation) || accessory.addService(this.Service.AccessoryInformation);
-	info.setCharacteristic(this.Characteristic.Manufacturer, 'Shelly')
-		.setCharacteristic(this.Characteristic.Model, '3EM-channel')
-		.setCharacteristic(this.Characteristic.SerialNumber, serial + '-ch' + (channelIndex + 1))
-		.setCharacteristic(this.Characteristic.FirmwareRevision, version || '1.0.0');
-
-	// Lightbulb service used to expose Eve characteristics
-	const light = accessory.addService(this.Service.Lightbulb, name);
-	try {
-		light.addCharacteristic(EvePowerConsumption);
-		light.addCharacteristic(EveTotalConsumption);
-		light.addCharacteristic(EveVoltage);
-	} catch (e) {
-		this.log('ThreeEmPlatform: failed to add Eve characteristics to auto accessory: ' + e.message);
-	}
-
-	// Add FakeGato history bound to the platform accessory
-	try {
-		const history = new this.FakeGato('energy', accessory);
-		// store on context for later updates
-		accessory.context._fakegato = history;
-	} catch (e) {
-		this.log('ThreeEmPlatform: failed to create FakeGato on auto accessory: ' + e.message);
-	}
-
-	// Register the new accessory with Homebridge
-	try {
-		const PLUGIN_NAME = require('./package.json').name || 'homebridge-3em-energy-meter';
-		const PLATFORM_NAME = '3EMEnergyMeterPlatform';
-		this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-		this.log('ThreeEmPlatform: registered auto accessory: ' + name + ' (ch=' + (channelIndex + 1) + ')');
-	} catch (e) {
-		this.log('ThreeEmPlatform: failed to register accessory: ' + e.message);
-		return;
-	}
-
-	// Polling loop to update this accessory's values (independent small poller)
+	const baseName = this.config.name || 'Shelly 3EM';
 	const updateInterval = Number(this.config.update_interval || 10000);
 	const opsBase = { uri: 'http://' + (this.config.ip || '127.0.0.1') + '/status/emeters?', method: 'GET', timeout: Number(this.config.timeout || 5000) };
 	const self = this;
-	const poll = function() {
-		const ops = Object.assign({}, opsBase);
-		if (self.config.auth) ops.auth = { user: self.config.auth.user, pass: self.config.auth.pass };
-		request(ops, (err, res, body) => {
-			if (err) { self.log('ThreeEmPlatform auto accessory poll error: ' + err.message); return; }
-			try {
-				const json = JSON.parse(body);
-				if (!Array.isArray(json.emeters) || json.emeters.length <= channelIndex) return;
-				const ch = json.emeters[channelIndex];
-				const power = parseFloat(ch.power || 0);
-				const total = parseFloat(ch.total || 0) / 1000;
-				const voltage = parseFloat(ch.voltage || 0);
 
-				// Update characteristics
-				try {
-					const p = light.getCharacteristic(EvePowerConsumption);
-					const t = light.getCharacteristic(EveTotalConsumption);
-					const v = light.getCharacteristic(EveVoltage);
-					if (p) { try { light.updateCharacteristic(p, Math.round(power)); } catch(_){}; try { p.setValue(Math.round(power)); } catch(_){} }
-					if (t) { try { light.updateCharacteristic(t, Number(total)); } catch(_){}; try { t.setValue(Number(total)); } catch(_){} }
-					if (v) { try { light.updateCharacteristic(v, Number(voltage)); } catch(_){}; try { v.setValue(Number(voltage)); } catch(_){} }
-				} catch (e) { self.log('ThreeEmPlatform char update error: ' + e.message); }
+	channelsToCreate.forEach(channelIndex => {
+		const uuidSeed = serial + '-ch' + channelIndex;
+		const uuid = this.api.hap.uuid.generate(uuidSeed);
 
-				// FakeGato add entry if present
+		// If accessory already cached, skip creation
+		if (this.cachedAccessories && this.cachedAccessories[uuid]) {
+			this.log('ThreeEmPlatform: channel accessory already configured (UUID=' + uuid + '), skipping creation.');
+			return;
+		}
+
+		const name = baseName + ' - Channel ' + (channelIndex + 1);
+		const accessory = new this.api.platformAccessory(name, uuid);
+
+		// Information service
+		const info = accessory.getService(this.Service.AccessoryInformation) || accessory.addService(this.Service.AccessoryInformation);
+		info.setCharacteristic(this.Characteristic.Manufacturer, 'Shelly')
+			.setCharacteristic(this.Characteristic.Model, '3EM-channel')
+			.setCharacteristic(this.Characteristic.SerialNumber, serial + '-ch' + (channelIndex + 1))
+			.setCharacteristic(this.Characteristic.FirmwareRevision, version || '1.0.0');
+
+		// Lightbulb service used to expose Eve characteristics
+		const light = accessory.addService(this.Service.Lightbulb, name);
+		try {
+			light.addCharacteristic(EvePowerConsumption);
+			light.addCharacteristic(EveTotalConsumption);
+			light.addCharacteristic(EveVoltage);
+		} catch (e) {
+			this.log('ThreeEmPlatform: failed to add Eve characteristics to auto accessory: ' + e.message);
+		}
+
+		// Add FakeGato history bound to the platform accessory
+		try {
+			const history = new this.FakeGato('energy', accessory);
+			// store on context for later updates
+			accessory.context._fakegato = history;
+		} catch (e) {
+			this.log('ThreeEmPlatform: failed to create FakeGato on auto accessory: ' + e.message);
+		}
+
+		// Register the new accessory with Homebridge
+		try {
+			const PLUGIN_NAME = require('./package.json').name || 'homebridge-3em-energy-meter';
+			const PLATFORM_NAME = '3EMEnergyMeterPlatform';
+			this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+			this.log('ThreeEmPlatform: registered auto accessory: ' + name + ' (ch=' + (channelIndex + 1) + ')');
+		} catch (e) {
+			this.log('ThreeEmPlatform: failed to register accessory: ' + e.message);
+			return;
+		}
+
+		// Polling loop to update this accessory's values (independent small poller)
+		const poll = function() {
+			const ops = Object.assign({}, opsBase);
+			if (self.config.auth) ops.auth = { user: self.config.auth.user, pass: self.config.auth.pass };
+			request(ops, (err, res, body) => {
+				if (err) { self.log('ThreeEmPlatform auto accessory poll error: ' + err.message); return; }
 				try {
-					const hist = accessory.context && accessory.context._fakegato;
-					if (hist && typeof hist.addEntry === 'function') {
-						hist.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: power });
-					}
-				} catch (e) { /* ignore history errors */ }
-			} catch (e) {
-				self.log('ThreeEmPlatform parse error: ' + e.message);
-			}
-		});
-	};
-	// immediate poll and interval
-	try { poll(); } catch (e) {}
-	setInterval(poll, updateInterval);
+					const json = JSON.parse(body);
+					if (!Array.isArray(json.emeters) || json.emeters.length <= channelIndex) return;
+					const ch = json.emeters[channelIndex];
+					const power = parseFloat(ch.power || 0);
+					const total = parseFloat(ch.total || 0) / 1000;
+					const voltage = parseFloat(ch.voltage || 0);
+
+					// Update characteristics
+					try {
+						const p = light.getCharacteristic(EvePowerConsumption);
+						const t = light.getCharacteristic(EveTotalConsumption);
+						const v = light.getCharacteristic(EveVoltage);
+						if (p) { try { light.updateCharacteristic(p, Math.round(power)); } catch(_){}; try { p.setValue(Math.round(power)); } catch(_){} }
+						if (t) { try { light.updateCharacteristic(t, Number(total)); } catch(_){}; try { t.setValue(Number(total)); } catch(_){} }
+						if (v) { try { light.updateCharacteristic(v, Number(voltage)); } catch(_){}; try { v.setValue(Number(voltage)); } catch(_){} }
+					} catch (e) { self.log('ThreeEmPlatform char update error: ' + e.message); }
+
+					// FakeGato add entry if present
+					try {
+						const hist = accessory.context && accessory.context._fakegato;
+						if (hist && typeof hist.addEntry === 'function') {
+							hist.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: power });
+						}
+					} catch (e) { /* ignore history errors */ }
+				} catch (e) {
+					self.log('ThreeEmPlatform parse error: ' + e.message);
+				}
+			});
+		};
+		// immediate poll and interval
+		try { poll(); } catch (e) {}
+		setInterval(poll, updateInterval);
+	});
 };
 
 // Channel-specific accessory: exposes Eve energy characteristics and FakeGato history for a single emeter channel
