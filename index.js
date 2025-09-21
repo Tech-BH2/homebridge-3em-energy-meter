@@ -13,19 +13,52 @@ module.exports = (api) => {
 	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
 };
 
-function EnergyMeter(log, config, api) {
-// ...existing constructor code...
-
-EnergyMeter.prototype.getServices = function() {
-	// Create the main Outlet service
-	this.service = new Service.Outlet(this.name);
-	// Optionally add characteristics here (CurrentConsumption, Voltage, etc.)
-
-	// Create the FakeGato history service
-	this.historyService = new FakeGatoHistoryService('energy', this);
-
-	return [this.service, this.historyService];
+// Eve / Elgato custom characteristics used by many energy plugins and the Eve app
+// These are optional but help apps recognise power/energy/voltage values for history display
+var EvePowerConsumption = function () {
+	Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+	this.setProps({
+		format: Characteristic.Formats.UINT16,
+		unit: 'W',
+		maxValue: 100000,
+		minValue: 0,
+		minStep: 1,
+		perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+	});
+	this.value = this.getDefaultValue();
 };
+inherits(EvePowerConsumption, Characteristic);
+
+var EveTotalConsumption = function () {
+	Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+	this.setProps({
+		format: Characteristic.Formats.FLOAT,
+		unit: 'kWh',
+		maxValue: 1000000000,
+		minValue: 0,
+		minStep: 0.001,
+		perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+	});
+	this.value = this.getDefaultValue();
+};
+inherits(EveTotalConsumption, Characteristic);
+
+var EveVoltage = function () {
+	Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+	this.setProps({
+		format: Characteristic.Formats.FLOAT,
+		unit: 'V',
+		maxValue: 1000,
+		minValue: 0,
+		minStep: 0.1,
+		perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+	});
+	this.value = this.getDefaultValue();
+};
+inherits(EveVoltage, Characteristic);
+
+function EnergyMeter(log, config, api) {
+	// constructor continues below
 	this.log = log;
 	this.ip = config["ip"] || "127.0.0.1";
 	this.url = "http://" + this.ip + "/status/emeters?";
@@ -59,6 +92,14 @@ EnergyMeter.prototype.getServices = function() {
 }
 
 EnergyMeter.prototype.getServices = function() {
+	// Accessory information
+	const informationService = new Service.AccessoryInformation();
+	informationService
+		.setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+		.setCharacteristic(Characteristic.Model, '3EM')
+		.setCharacteristic(Characteristic.SerialNumber, this.serial || 'unknown')
+		.setCharacteristic(Characteristic.FirmwareRevision, version || '1.0.0');
+
 	// Create the main Outlet service
 	this.service = new Service.Outlet(this.name);
 	// Add standard characteristics
@@ -81,10 +122,28 @@ EnergyMeter.prototype.getServices = function() {
 		this.service.addCharacteristic(Characteristic.Current);
 	}
 
+	// Add Eve custom characteristics so apps (Eve) recognise power/energy/voltage for history
+	try {
+		this.service.addCharacteristic(new EvePowerConsumption());
+		this.service.addCharacteristic(new EveTotalConsumption());
+		this.service.addCharacteristic(new EveVoltage());
+
+		// Provide simple getters for these
+		this.service.getCharacteristic(EvePowerConsumption)
+			.on('get', callback => callback(null, Math.round(this.powerConsumption)));
+		this.service.getCharacteristic(EveTotalConsumption)
+			.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
+		this.service.getCharacteristic(EveVoltage)
+			.on('get', callback => callback(null, Number(this.voltage1)));
+	} catch (e) {
+		// If custom characteristics clash on some platforms, ignore silently
+		this.log('Eve characteristics not added: ' + e.message);
+	}
+
 	// Create the FakeGato history service
 	this.historyService = new FakeGatoHistoryService('energy', this);
 
-	return [this.service, this.historyService];
+	return [informationService, this.service, this.historyService];
 };
 
 EnergyMeter.prototype.updateState = function() {
@@ -223,6 +282,24 @@ EnergyMeter.prototype.updateState = function() {
 					.setValue(this.powerConsumption > 0);
 				this.service.getCharacteristic(Characteristic.OutletInUse)
 					.setValue(this.powerConsumption > 0);
+
+				// Update Eve custom characteristics if present so apps like Eve treat this as an energy meter
+				try {
+					if (this.service.getCharacteristic(EvePowerConsumption)) {
+						this.service.getCharacteristic(EvePowerConsumption)
+							.setValue(Math.round(this.powerConsumption));
+					}
+					if (this.service.getCharacteristic(EveTotalConsumption)) {
+						this.service.getCharacteristic(EveTotalConsumption)
+							.setValue(Number(this.totalPowerConsumption));
+					}
+					if (this.service.getCharacteristic(EveVoltage)) {
+						this.service.getCharacteristic(EveVoltage)
+							.setValue(Number(this.voltage1));
+					}
+				} catch (e) {
+					// ignore if custom characteristics are not available
+				}
 			}
 			// FakeGato
 			if (this.historyService) {
