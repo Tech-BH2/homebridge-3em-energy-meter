@@ -3,133 +3,79 @@
   "pluginType": "platform",
   "singular": true,
   "headerDisplay": "Shelly 3EM Energy Meter Plugin",
-  "footerDisplay": "This accessory will only be supported in the third-party Homekit app EVE.",
+  "footerDisplay": "This accessory will only be supported in the third-party HomeKit app EVE.",
   "schema": {
     "type": "object",
     "properties": {
-      "mode": {
-        "title": "Mode",
-        "type": "string",
-        "enum": ["accessory", "platform"],
-        "default": "platform",
-        "description": "Choose whether to expose as standalone accessory or as platform (with optional split channels)."
+      "split_channels": {
+        "type": "boolean",
+        "title": "Split Channels",
+        "description": "Enable to create separate accessories for each channel of the Shelly 3EM.",
+        "default": false
       },
-          "ip": {
-      "type": "string",
-      "title": "Shelly 3EM IP Address",
-      "description": "The IP address of your Shelly 3EM device.",
-      "format": "ipv4",
-      "minLength": 7,
-      "maxLength": 15,
-      "default": "192.168.1.100"
-    },
-    "username": {
-      "type": "string",
-      "title": "Username",
-      "description": "The username for the Shelly 3EM device (if authentication is enabled).",
-      "default": "admin"
-    },
-    "password": {
-      "type": "string",
-      "title": "Password",
-      "description": "The password for the Shelly 3EM device (if authentication is enabled).",
-      "default": "admin"
-    },
-    "use_em": {
-      "type": "boolean",
-      "title": "Enable Energy Monitoring",
-      "description": "Enable energy monitoring on the Shelly 3EM device.",
-      "default": true
-    },
-    "split_channels": {
-      "type": "boolean",
-      "title": "Split Channels",
-      "description": "Treat each channel as a separate accessory in HomeKit.",
-      "default": true
-    },
-    "channels": {
-      "type": "array",
-      "title": "Channels",
-      "description": "List of channels to monitor. Valid values are 1 and 2.",
-      "items": {
-        "type": "integer",
-        "enum": [1, 2]
+      "use_em": {
+        "type": "boolean",
+        "title": "Use EM Mode",
+        "description": "Enable if your device is a 2-channel Shelly EM configuration.",
+        "default": false
       },
-      "default": [1, 2]
-    },
-    "updateInterval": {
-      "type": "integer",
-      "title": "Update Interval",
-      "description": "The interval (in milliseconds) between data updates.",
-      "default": 5000,
-      "minimum": 1000,
-      "maximum": 60000
-    }
-  }
-    },
-    "allOf": [
-      {
-        "if": { "properties": { "mode": { "const": "accessory" } } },
-        "then": {
+      "devices": {
+        "type": "array",
+        "title": "3EM Devices",
+        "description": "Add one or more Shelly 3EM devices. Each device will create an accessory for HomeKit.",
+        "items": {
+          "type": "object",
           "properties": {
-            "accessories": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "title": "Accessory Type",
-                    "type": "string",
-                    "enum": ["3EMEnergyMeter", "3EMEnergyMeterEnergy"]
-                  },
-                  "name": { "title": "Name", "type": "string", "default": "Energy Meter" },
-                  "ip": { "title": "IP Address", "type": "string", "format": "ipv4" },
-                  "auth": {
-                    "title": "Shelly 3EM Web Interface Authentication",
-                    "type": "object",
-                    "properties": {
-                      "user": { "title": "Username", "type": "string" },
-                      "pass": { "title": "Password", "type": "string" }
-                    }
-                  },
-                  "timeout": { "title": "Request Timeout", "type": "integer", "default": 5000, "minimum": 1000, "maximum": 30000 },
-                  "update_interval": { "title": "Update Interval", "type": "integer", "default": 10000, "minimum": 1000, "maximum": 60000 },
-                  "serial": { "title": "Serial", "type": "string", "default": "123456789012345", "minLength": 5, "maxLength": 16 }
-                },
-                "required": ["type", "name", "ip"]
-              }
-            }
-          }
-        }
-      },
-      {
-        "if": { "properties": { "mode": { "const": "platform" } } },
-        "then": {
-          "properties": {
-            "platform": { "type": "string", "const": "3EMEnergyMeterPlatform" },
-            "name": { "title": "Name", "type": "string", "default": "Energy Meter" },
-            "ip": { "title": "IP Address", "type": "string", "format": "ipv4", "default": "127.0.0.1" },
+            "name": {
+              "type": "string",
+              "title": "Accessory Name",
+              "default": "3EM Energy"
+            },
+            "ip": {
+              "type": "string",
+              "title": "Device IP",
+              "default": "192.168.1.100"
+            },
             "auth": {
-              "title": "Shelly 3EM Web Interface Authentication",
               "type": "object",
+              "title": "HTTP Authentication (optional)",
               "properties": {
-                "user": { "title": "Username", "type": "string" },
-                "pass": { "title": "Password", "type": "string" }
+                "user": {
+                  "type": "string",
+                  "title": "Username"
+                },
+                "pass": {
+                  "type": "string",
+                  "title": "Password"
+                }
               }
             },
-            "timeout": { "title": "Request Timeout", "type": "integer", "default": 5000, "minimum": 1000, "maximum": 30000 },
-            "update_interval": { "title": "Update Interval", "type": "integer", "default": 10000, "minimum": 1000, "maximum": 60000 },
-            "use_em": { "title": "Use Shelly EM device", "type": "boolean", "default": true },
-            "use_em_mode": { "title": "Shelly EM operating mode (0=combine,1=channel1,2=channel2)", "type": "integer", "default": 0, "minimum": 0, "maximum": 2 },
-            "split_channels": { "title": "Split channels into separate accessories (channel1 & channel2)", "type": "boolean", "default": true },
-            "negative_handling_mode": { "title": "Negative Values handling mode (0=zero,1=absolute)", "type": "integer", "default": 0, "minimum": 0, "maximum": 1 },
-            "use_pf": { "title": "Use Power Factor (pf) when calculating Total Ampere", "type": "boolean", "default": false },
-            "debug_log": { "title": "Enable Debug Logging", "type": "boolean", "default": false },
-            "serial": { "title": "Shelly 3EM Device Serial", "type": "string", "default": "123456789012345", "minLength": 5, "maxLength": 16 }
+            "serial": {
+              "type": "string",
+              "title": "Serial Number (optional)",
+              "default": ""
+            },
+            "update_interval": {
+              "type": "integer",
+              "title": "Update Interval (ms)",
+              "default": 10000,
+              "minimum": 1000
+            },
+            "debug_log": {
+              "type": "boolean",
+              "title": "Enable Debug Logging",
+              "default": false
+            }
           },
-          "required": ["platform", "name", "ip"]
+          "required": [
+            "name",
+            "ip"
+          ]
         }
       }
+    },
+    "required": [
+      "devices"
     ]
   }
-
+}
