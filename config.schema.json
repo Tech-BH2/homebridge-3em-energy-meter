@@ -93,11 +93,11 @@
         "required": true
         },
   "add_channel_accessory": {
-  "title": "Add channel-specific accessory",
+  "title": "Add channel-specific accessory (UI helper)",
   "type": "boolean",
   "default": false,
   "required": false,
-  "description": "If enabled, the plugin will expose an additional accessory that reports a single channel's energy (useful to split channel 2)."
+  "description": "This toggle enables channel helper options below. Note: Homebridge Config UI cannot auto-create separate accessory instances from a single accessory plugin entry; enabling this will show helper options and example config snippets so you can quickly add channel accessories manually."
   },
   "channel": {
   "title": "Channel for the additional accessory",
@@ -106,7 +106,28 @@
   "required": false,
   "minimum": 1,
   "maximum": 3,
-  "description": "Select the emeter channel to expose in the additional accessory (1-based)."
+  "description": "Select the emeter channel to expose in the additional accessory (1-based). Leave at 2 to expose channel 2. This field is used in the example config snippet only."
+  },
+  "expose_channel_1": {
+  "title": "Expose channel 1 accessory helper",
+  "type": "boolean",
+  "default": false,
+  "required": false,
+  "description": "When checked, the UI will show an example config snippet to create an accessory exposing channel 1. You must copy/paste the snippet into your config.json or add it as a new accessory in the UI."
+  },
+  "expose_channel_2": {
+  "title": "Expose channel 2 accessory helper",
+  "type": "boolean",
+  "default": false,
+  "required": false,
+  "description": "When checked, the UI will show an example config snippet to create an accessory exposing channel 2. You must copy/paste the snippet into your config.json or add it as a new accessory in the UI."
+  },
+  "expose_channel_3": {
+  "title": "Expose channel 3 accessory helper",
+  "type": "boolean",
+  "default": false,
+  "required": false,
+  "description": "When checked, the UI will show an example config snippet to create an accessory exposing channel 3. You must copy/paste the snippet into your config.json or add it as a new accessory in the UI."
   },
         "serial": {
         "title": "Shelly 3EM Device Serial",

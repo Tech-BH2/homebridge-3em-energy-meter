@@ -1,4 +1,3 @@
-// Quick test to require the plugin and simulate a minimal Homebridge API
 const path = require('path');
 const plugin = require(path.join('..','index.js'));
 // Create a minimal fake hap with Service and Characteristic constructors
