@@ -64,6 +64,94 @@ module.exports = (api) => {
 	// Register both the main accessory and an energy-only accessory type.
 	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
 	api.registerAccessory('3EMEnergyMeterEnergy', EnergyOnly);
+	// Register channel-specific energy accessory (channel index configurable via config.channelIndex)
+	api.registerAccessory('3EMEnergyMeterChannel', EnergyChannel);
+};
+
+// Channel-specific accessory: exposes Eve energy characteristics and FakeGato history for a single emeter channel
+function EnergyChannel(log, config, api) {
+	this.log = log;
+	this.ip = config["ip"] || "127.0.0.1";
+	this.url = "http://" + this.ip + "/status/emeters?";
+	this.auth = config["auth"];
+	this.name = config["name"] || ("Energy ch" + (config.channelIndex || 2) + " " + this.ip);
+	this.channelIndex = Number(config.channelIndex || 1); // 0-based index (0 = channel1, 1 = channel2)
+	this.timeout = config["timeout"] || 5000;
+	this.http_method = "GET";
+	this.update_interval = Number(config["update_interval"] || 10000);
+	this.debug_log = config["debug_log"] || false;
+
+	this.powerConsumption = 0;
+	this.totalPowerConsumption = 0;
+	this.voltage1 = 0;
+
+	// Services
+	this.informationService = new Service.AccessoryInformation();
+	this.informationService
+		.setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+		.setCharacteristic(Characteristic.Model, '3EM-channel')
+		.setCharacteristic(Characteristic.SerialNumber, (config.serial || 'unknown') + '-ch' + this.channelIndex)
+		.setCharacteristic(Characteristic.FirmwareRevision, version || '1.0.0');
+
+	this.service = new Service.Lightbulb(this.name);
+	try {
+		this.service.addCharacteristic(EvePowerConsumption);
+		this.service.addCharacteristic(EveTotalConsumption);
+		this.service.addCharacteristic(EveVoltage);
+		this.evePowerChar = this.service.getCharacteristic(EvePowerConsumption);
+		this.eveTotalChar = this.service.getCharacteristic(EveTotalConsumption);
+		this.eveVoltageChar = this.service.getCharacteristic(EveVoltage);
+		if (this.debug_log) this.log('EnergyChannel: added Eve characteristics (ch=' + this.channelIndex + ')');
+	} catch (e) {
+		this.log('EnergyChannel: failed to add Eve characteristics: ' + e.message);
+		this.evePowerChar = null; this.eveTotalChar = null; this.eveVoltageChar = null;
+	}
+
+	this.historyService = new FakeGatoHistoryService('energy', this);
+
+	setInterval(() => { this.updateState && this.updateState(); }, this.update_interval);
+	try { this.updateState && this.updateState(); } catch (e) { this.log('EnergyChannel initial poll failed: ' + e.message); }
+}
+
+EnergyChannel.prototype.getServices = function() {
+	return [this.informationService, this.service, this.historyService];
+};
+
+EnergyChannel.prototype.updateState = function() {
+	const ops = { uri: this.url, method: this.http_method, timeout: this.timeout };
+	if (this.auth) ops.auth = { user: this.auth.user, pass: this.auth.pass };
+	if (this.debug_log) this.log('EnergyChannel: requesting ' + this.url + ' (ch=' + this.channelIndex + ')');
+	request(ops, (error, res, body) => {
+		if (error) { this.log('EnergyChannel Bad http response: ' + error.message); return; }
+		try {
+			const json = JSON.parse(body);
+			if (Array.isArray(json.emeters) && json.emeters.length > this.channelIndex) {
+				const ch = json.emeters[this.channelIndex];
+				this.powerConsumption = parseFloat(ch.power || 0);
+				this.totalPowerConsumption = (parseFloat(ch.total || 0) / 1000);
+				this.voltage1 = parseFloat(ch.voltage || 0);
+			}
+			if (this.debug_log) this.log('EnergyChannel successful: ch=' + this.channelIndex + ' power=' + this.powerConsumption + ' total=' + this.totalPowerConsumption + ' V=' + this.voltage1);
+
+			if (this.service) {
+				try {
+					const p = this.service.getCharacteristic(EvePowerConsumption);
+					const t = this.service.getCharacteristic(EveTotalConsumption);
+					const v = this.service.getCharacteristic(EveVoltage);
+					if (p) try { this.service.updateCharacteristic(p, Math.round(this.powerConsumption)); p.setValue(Math.round(this.powerConsumption)); } catch(e){}
+					if (t) try { this.service.updateCharacteristic(t, Number(this.totalPowerConsumption)); t.setValue(Number(this.totalPowerConsumption)); } catch(e){}
+					if (v) try { this.service.updateCharacteristic(v, Number(this.voltage1)); v.setValue(Number(this.voltage1)); } catch(e){}
+				} catch (e) { this.log('EnergyChannel char update error: ' + e.message); }
+			}
+
+			if (this.historyService) {
+				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
+				if (this.debug_log) this.log('EnergyChannel FakeGato addEntry power=' + this.powerConsumption);
+			}
+		} catch (e) {
+			this.log('EnergyChannel parse error: ' + e.message);
+		}
+	});
 };
 
 // Energy-only accessory: exposes Eve energy characteristics and FakeGato history only.
