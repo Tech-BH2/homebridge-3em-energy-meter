@@ -131,6 +131,31 @@ ThreeEmPlatform.prototype.configureAccessory = function(accessory) {
 	this.cachedAccessories = this.cachedAccessories || {};
 	this.cachedAccessories[accessory.UUID] = accessory;
 	if (this.log) this.log('ThreeEmPlatform: configureAccessory restored: ' + accessory.displayName);
+	// Ensure restored accessories have a FakeGato history instance attached so the shared poller can write entries.
+	try {
+		// If accessory already has context._fakegato, assume it's fine
+		if (!accessory.context) accessory.context = {};
+		if (!accessory.context._fakegato && this.FakeGato) {
+			try {
+				const hist = new this.FakeGato('energy', accessory);
+				// Only add the service if it's not already present on the accessory
+				try {
+					const existing = accessory.getService && (accessory.getService(hist.UUID) || accessory.getService('E863F007-079E-48FF-8F27-9C2605A29F52'));
+					if (!existing) {
+						try { accessory.addService(hist); } catch (e) { if (this.log) this.log('ThreeEmPlatform: configureAccessory addService(history) failed: ' + e.message); }
+					} else {
+						if (this.log) this.log('ThreeEmPlatform: configureAccessory detected existing FakeGato service, skipping addService');
+					}
+				} catch (e) {
+					if (this.log) this.log('ThreeEmPlatform: configureAccessory check/add history service error: ' + e.message);
+				}
+				accessory.context._fakegato = hist;
+				if (this.log && this.config && this.config.debug_log) this.log('ThreeEmPlatform: attached FakeGato history to restored accessory: ' + accessory.displayName);
+			} catch (e) {
+				if (this.log) this.log('ThreeEmPlatform: failed to create FakeGato for restored accessory: ' + e.message);
+			}
+		}
+	} catch (e) { if (this.log) this.log('ThreeEmPlatform: configureAccessory history attach failed: ' + e.message); }
 };
 
 ThreeEmPlatform.prototype.didFinishLaunching = function() {
