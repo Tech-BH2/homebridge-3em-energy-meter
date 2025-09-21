@@ -236,11 +236,19 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 			// Use the same FakeGatoHistoryService constructor used elsewhere in the plugin
 			const historyService = new FakeGatoHistoryService('energy', accessory);
 			try {
-				accessory.addService(historyService);
+				// Only add the FakeGato service to the accessory if it doesn't already exist.
+				// Some restore/restore-cached scenarios will already have the service, and
+				// calling addService again can throw "Cannot add a Service with the same UUID"
+				const existing = accessory.getService && (accessory.getService(historyService.UUID) || accessory.getService('E863F007-079E-48FF-8F27-9C2605A29F52'));
+				if (!existing) {
+					accessory.addService(historyService);
+				} else {
+					if (this.log) this.log('ThreeEmPlatform: FakeGato service already present on accessory, skipping addService');
+				}
 			} catch (e) {
 				if (this.log) this.log('ThreeEmPlatform: accessory.addService(historyService) failed: ' + e.message);
 			}
-			// store on context for later updates
+			// Always store the history instance on context for later updates by the shared poller
 			accessory.context._fakegato = historyService;
 		} catch (e) {
 			this.log('ThreeEmPlatform: failed to create FakeGato on auto accessory: ' + e.message);
