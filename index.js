@@ -104,14 +104,23 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 		return;
 	}
 
-	// Determine which channels to create based on explicit checkboxes. If none are selected, fall back to the legacy `channel` field.
+	// Determine which channels to create:
+	// - If split_channels is true and this is a Shelly EM, create channel 1 and 2 accessories.
+	// - Otherwise use explicit checkboxes expose_channel_1/2/3.
+	// - If none selected, fall back to the legacy `channel` field.
 	const channelsToCreate = [];
-	if (this.config.expose_channel_1) channelsToCreate.push(0);
-	if (this.config.expose_channel_2) channelsToCreate.push(1);
-	if (this.config.expose_channel_3) channelsToCreate.push(2);
-	if (channelsToCreate.length === 0 && this.config.channel) {
-		const single = Math.max(1, Math.min(3, Number(this.config.channel || 2))) - 1;
-		channelsToCreate.push(single);
+	if (this.config.split_channels && this.config.use_em) {
+		// create channel 1 and channel 2
+		channelsToCreate.push(0);
+		channelsToCreate.push(1);
+	} else {
+		if (this.config.expose_channel_1) channelsToCreate.push(0);
+		if (this.config.expose_channel_2) channelsToCreate.push(1);
+		if (this.config.expose_channel_3) channelsToCreate.push(2);
+		if (channelsToCreate.length === 0 && this.config.channel) {
+			const single = Math.max(1, Math.min(3, Number(this.config.channel || 2))) - 1;
+			channelsToCreate.push(single);
+		}
 	}
 
 	if (channelsToCreate.length === 0) {

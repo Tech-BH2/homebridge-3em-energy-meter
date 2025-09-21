@@ -71,6 +71,13 @@
         "maximum": 2,
         "description": "Is used ONLY when 'use_em' is true."
         }, 
+  "split_channels": {
+  "title": "Split channels into separate accessories (channel1 & channel2)",
+  "type": "boolean",
+  "default": false,
+  "required": false,
+  "description": "When enabled (and when using a Shelly EM), create two accessories: one for channel 1 and one for channel 2. This is useful when you want separate HomeKit accessories for each circuit. Note: do not enable together with manual channel accessories to avoid duplicates."
+  },
         "negative_handling_mode": {
         "title": "Negative Values handling mode (0=zero Negative Values,1=absolute Negative Values)",
         "type": "integer",
