@@ -29,6 +29,14 @@
       "description": "The username for the Shelly 3EM device (if authentication is enabled).",
       "default": "admin"
     },
+    "Serial": {
+      "type": "string",
+      "title": "Shelly 3EM Device Serial",
+      "description": "The serial of the Shelly device",
+      "default": "123456789012345",
+      "minLength": 5,
+      "maxLength": 16,
+    },
     "password": {
       "type": "string",
       "title": "Password",
