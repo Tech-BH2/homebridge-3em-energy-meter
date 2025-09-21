@@ -13,7 +13,7 @@
         "enum": ["accessory", "platform"],
         "default": "platform",
         "description": "Choose whether to expose as standalone accessory or as platform (with optional split channels)."
-      }
+      },
           "ip": {
       "type": "string",
       "title": "Shelly 3EM IP Address",
