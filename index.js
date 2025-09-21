@@ -69,6 +69,12 @@ module.exports = (api) => {
 	// Also register a dynamic platform so the plugin can auto-create a channel accessory when configured via the UI.
 	// This keeps backward compatibility while enabling the auto-create behavior (option A).
 	api.registerPlatform('3EMEnergyMeterPlatform', ThreeEmPlatform);
+	// Register legacy/alternate platform name to be tolerant of older config builders
+	try {
+		api.registerPlatform('3EMEnergyMeter', ThreeEmPlatform);
+	} catch (e) {
+		// ignore if already registered by Homebridge or not supported
+	}
 };
 
 // Dynamic platform implementation — creates accessories programmatically when UI option is enabled
@@ -95,7 +101,8 @@ function ThreeEmPlatform(log, config, api) {
 	}
 
 	// Optionally create and register a child bridge for easier troubleshooting
-	if (this.config && this.config.create_child_bridge) {
+	// Auto-enable child bridge if `_bridge` present, unless explicitly disabled
+	if (this.config && (this.config.create_child_bridge || (this.config._bridge && this.config.create_child_bridge !== false))) {
 		try {
 			const BRIDGE_NAME = (this.config.name || '3EM Child Bridge') + ' Child Bridge';
 			const bridgeUUID = api.hap.uuid.generate((this.config.serial || '3em') + '-child-bridge');
