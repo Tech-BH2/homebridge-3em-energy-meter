@@ -5,16 +5,15 @@ const version = require('./package.json').version;
 
 let Service, Characteristic, FakeGatoHistoryService;
 
+
 module.exports = (api) => {
-	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
-
-
-function EnergyMeter(log, config, api) {
-	// Homebridge 2.0: get hap and Service/Characteristic from api
 	Service = api.hap.Service;
 	Characteristic = api.hap.Characteristic;
 	FakeGatoHistoryService = require('fakegato-history')(api);
+	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
+};
 
+function EnergyMeter(log, config, api) {
 	this.log = log;
 	this.ip = config["ip"] || "127.0.0.1";
 	this.url = "http://" + this.ip + "/status/emeters?";
@@ -40,65 +39,6 @@ function EnergyMeter(log, config, api) {
 	this.pf0 = 1;
 	this.pf1 = 1;
 	this.pf2 = 1;
-
-	var EvePowerConsumption = function () {
-		Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-		this.setProps({
-			format: Characteristic.Formats.UINT16,
-			unit: "Watts",
-			maxValue: 100000,
-			minValue: 0,
-			minStep: 1,
-			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-		});
-		this.value = this.getDefaultValue();
-	};
-	EvePowerConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
-	inherits(EvePowerConsumption, Characteristic);
-
-	var EveTotalConsumption = function () {
-		Characteristic.call(this, 'Energy', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-		this.setProps({
-			format: Characteristic.Formats.FLOAT,
-			unit: 'kWh',
-			maxValue: 1000000000,
-			minValue: 0,
-			minStep: 0.001,
-			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-		});
-		this.value = this.getDefaultValue();
-	};
-	EveTotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
-	inherits(EveTotalConsumption, Characteristic);
-
-	var EveVoltage1 = function () {
-		Characteristic.call(this, 'Volt', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-		this.setProps({
-			format: Characteristic.Formats.FLOAT,
-			unit: 'Volt',
-			maxValue: 1000000000,
-			minValue: 0,
-			minStep: 0.001,
-			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-		});
-		this.value = this.getDefaultValue();
-	};
-	EveVoltage1.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
-	inherits(EveVoltage1, Characteristic);
-
-	EnergyMeter.prototype.updateState = async function () {
-		if (this.waiting_response) {
-			this.log('Please select a higher update_interval value. Http command may not finish!');
-			return;
-		}
-		this.waiting_response = true;
-		const ops = {
-			uri: this.url,
-			method: this.http_method,
-			timeout: this.timeout
-		};
-		if (this.debug_log) {
-			this.log('Requesting energy values from Shelly 3EM(EM) ...');
 		}
 		if (this.auth) {
 			ops.auth = {
@@ -224,5 +164,4 @@ function EnergyMeter(log, config, api) {
 				this.log('Error processing data: ' + parseErr.message);
 			}
 		this.waiting_response = false;
-	});
-
+		});
