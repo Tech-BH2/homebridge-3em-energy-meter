@@ -4,58 +4,58 @@ const request = require('request');
 const version = require('./package.json').version;
 
 let Service, Characteristic, FakeGatoHistoryService;
-
+let EvePowerConsumption, EveTotalConsumption, EveVoltage;
 
 module.exports = (api) => {
 	Service = api.hap.Service;
 	Characteristic = api.hap.Characteristic;
 	FakeGatoHistoryService = require('fakegato-history')(api);
+
+	// Define Eve custom characteristics now that Characteristic is available
+	EvePowerConsumption = function () {
+		Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+		this.setProps({
+			format: Characteristic.Formats.UINT16,
+			unit: 'W',
+			maxValue: 100000,
+			minValue: 0,
+			minStep: 1,
+			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+		});
+		this.value = this.getDefaultValue();
+	};
+	inherits(EvePowerConsumption, Characteristic);
+
+	EveTotalConsumption = function () {
+		Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+		this.setProps({
+			format: Characteristic.Formats.FLOAT,
+			unit: 'kWh',
+			maxValue: 1000000000,
+			minValue: 0,
+			minStep: 0.001,
+			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+		});
+		this.value = this.getDefaultValue();
+	};
+	inherits(EveTotalConsumption, Characteristic);
+
+	EveVoltage = function () {
+		Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+		this.setProps({
+			format: Characteristic.Formats.FLOAT,
+			unit: 'V',
+			maxValue: 1000,
+			minValue: 0,
+			minStep: 0.1,
+			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+		});
+		this.value = this.getDefaultValue();
+	};
+	inherits(EveVoltage, Characteristic);
+
 	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
 };
-
-// Eve / Elgato custom characteristics used by many energy plugins and the Eve app
-// These are optional but help apps recognise power/energy/voltage values for history display
-var EvePowerConsumption = function () {
-	Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-	this.setProps({
-		format: Characteristic.Formats.UINT16,
-		unit: 'W',
-		maxValue: 100000,
-		minValue: 0,
-		minStep: 1,
-		perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-	});
-	this.value = this.getDefaultValue();
-};
-inherits(EvePowerConsumption, Characteristic);
-
-var EveTotalConsumption = function () {
-	Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-	this.setProps({
-		format: Characteristic.Formats.FLOAT,
-		unit: 'kWh',
-		maxValue: 1000000000,
-		minValue: 0,
-		minStep: 0.001,
-		perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-	});
-	this.value = this.getDefaultValue();
-};
-inherits(EveTotalConsumption, Characteristic);
-
-var EveVoltage = function () {
-	Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-	this.setProps({
-		format: Characteristic.Formats.FLOAT,
-		unit: 'V',
-		maxValue: 1000,
-		minValue: 0,
-		minStep: 0.1,
-		perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-	});
-	this.value = this.getDefaultValue();
-};
-inherits(EveVoltage, Characteristic);
 
 function EnergyMeter(log, config, api) {
 	// constructor continues below
