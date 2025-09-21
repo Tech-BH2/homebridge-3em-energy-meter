@@ -447,10 +447,10 @@ EnergyOnly.prototype.updateState = function() {
 
 			if (this.historyService) {
 				this.historyService.addEntry({
-					 time: Math.round(new Date().valueOf() / 1000),
-					 power: this.powerConsumption,
-					 energy: this.totalPowerConsumption 
-					});
+					time: Math.round(Date.now() / 1000),
+					power: this.powerConsumption,
+					energy: Math.round(this.totalPowerConsumption * 1000)  // Wh
+				});
 				if (this.debug_log) this.log(
 					'EnergyOnly FakeGato addEntry power=${this.powerConsumption}W energy=${this.totalPowerConsumption}kWh'
 				);
@@ -708,9 +708,9 @@ EnergyMeter.prototype.updateState = function() {
 			// EnergyMeter.prototype.updateState
 			if (this.historyService) {
 			this.historyService.addEntry({
-				time: Math.round(new Date().valueOf() / 1000),
-				power: this.powerConsumption,                        // W
-				energy: this.totalPowerConsumption                   // cumulative kWh
+				time: Math.round(Date.now() / 1000),
+				power: this.powerConsumption,
+				energy: Math.round(this.totalPowerConsumption * 1000)  // Wh
 			});
 			if (this.debug_log) this.log(
 				`FakeGato addEntry power=${this.powerConsumption}W energy=${this.totalPowerConsumption}kWh`
