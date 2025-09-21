@@ -1,4 +1,3 @@
-
 const inherits = require('util').inherits;
 const request = require('request');
 const version = require('./package.json').version;
@@ -77,7 +76,7 @@ module.exports = (api) => {
 	}
 };
 
-// Dynamic platform implementation — creates accessories programmatically when UI option is enabled
+// Dynamic platform implementation â creates accessories programmatically when UI option is enabled
 function ThreeEmPlatform(log, config, api) {
 	this.log = log;
 	this.config = config || {};
@@ -170,7 +169,7 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 		return;
 	}
 
-	// We're in split_channels mode — only relevant for Shelly EM devices.
+	// We're in split_channels mode â only relevant for Shelly EM devices.
 	// Create channel 1 (index 0) and channel 2 (index 1) accessories when using a Shelly EM.
 	const channelsToCreate = [];
 	if (this.config.use_em) {
@@ -274,12 +273,10 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 				// calling addService again can throw "Cannot add a Service with the same UUID"
 				const existing = accessory.getService && (accessory.getService(historyService.UUID) || accessory.getService('E863F007-079E-48FF-8F27-9C2605A29F52'));
 				if (!existing) {
-					accessory.addService(historyService);
 				} else {
 					if (this.log) this.log('ThreeEmPlatform: FakeGato service already present on accessory, skipping addService');
 				}
 			} catch (e) {
-				if (this.log) this.log('ThreeEmPlatform: accessory.addService(historyService) failed: ' + e.message);
 			}
 			// Always store the history instance on context for later updates by the shared poller
 			accessory.context._fakegato = historyService;
@@ -342,7 +339,7 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 							hist.addEntry({
 								time: Math.round(new Date().valueOf() / 1000),
 								power: power,                                        // W
-								energy: total                                        // cumulative kWh (already /1000 above)
+								energy: Math.round(total) // Wh (fixed)                                        // cumulative kWh (already /1000 above)
 							});
 							}
 							} catch (e) { /* ignore history errors */ }
@@ -449,7 +446,7 @@ EnergyOnly.prototype.updateState = function() {
 				this.historyService.addEntry({
 					time: Math.round(Date.now() / 1000),
 					power: this.powerConsumption,
-					energy: Math.round(this.totalPowerConsumption * 1000)  // Wh
+					energy: Math.round(this.totalPowerConsumption * 1000) // Wh (fixed)
 				});
 				if (this.debug_log) this.log(
 					'EnergyOnly FakeGato addEntry power=${this.powerConsumption}W energy=${this.totalPowerConsumption}kWh'
@@ -710,7 +707,7 @@ EnergyMeter.prototype.updateState = function() {
 			this.historyService.addEntry({
 				time: Math.round(Date.now() / 1000),
 				power: this.powerConsumption,
-				energy: Math.round(this.totalPowerConsumption * 1000)  // Wh
+				energy: Math.round(this.totalPowerConsumption * 1000) // Wh (fixed)
 			});
 			if (this.debug_log) this.log(
 				`FakeGato addEntry power=${this.powerConsumption}W energy=${this.totalPowerConsumption}kWh`
