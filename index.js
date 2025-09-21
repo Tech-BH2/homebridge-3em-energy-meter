@@ -337,9 +337,14 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 							try {
 								const acc = item.accessory;
 								const hist = acc && acc.context && acc.context._fakegato;
-								if (hist && typeof hist.addEntry === 'function') {
-									hist.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: power });
-								}
+								// ThreeEmPlatform pollAll loop
+							if (hist && typeof hist.addEntry === 'function') {
+							hist.addEntry({
+								time: Math.round(new Date().valueOf() / 1000),
+								power: power,                                        // W
+								energy: total                                        // cumulative kWh (already /1000 above)
+							});
+							}
 							} catch (e) { /* ignore history errors */ }
 						} catch (e) {
 							self.log('ThreeEmPlatform per-item update error: ' + e.message);
@@ -441,8 +446,14 @@ EnergyOnly.prototype.updateState = function() {
 			}
 
 			if (this.historyService) {
-				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
-				if (this.debug_log) this.log('EnergyOnly FakeGato addEntry power=' + this.powerConsumption);
+				this.historyService.addEntry({
+					 time: Math.round(new Date().valueOf() / 1000),
+					 power: this.powerConsumption,
+					 energy: this.totalPowerConsumption 
+					});
+				if (this.debug_log) this.log(
+					'EnergyOnly FakeGato addEntry power=${this.powerConsumption}W energy=${this.totalPowerConsumption}kWh'
+				);
 			}
 		} catch (e) {
 			this.log('EnergyOnly parse error: ' + e.message);
@@ -694,10 +705,17 @@ EnergyMeter.prototype.updateState = function() {
 			// The dedicated energy-only accessory publishes Eve characteristics and receives updates independently.
 			// Here we only write to FakeGato and log the latest values.
 			// FakeGato
+			// EnergyMeter.prototype.updateState
 			if (this.historyService) {
-				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
-				if (this.debug_log) this.log('FakeGato addEntry power=' + this.powerConsumption);
-			}
+			this.historyService.addEntry({
+				time: Math.round(new Date().valueOf() / 1000),
+				power: this.powerConsumption,                        // W
+				energy: this.totalPowerConsumption                   // cumulative kWh
+			});
+			if (this.debug_log) this.log(
+				`FakeGato addEntry power=${this.powerConsumption}W energy=${this.totalPowerConsumption}kWh`
+			);
+	}
 
 			// Update energy service Eve characteristics safely: retrieve actual characteristic instances from the service
 			try {
