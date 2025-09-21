@@ -15,13 +15,14 @@ module.exports = (api) => {
 	class EvePowerConsumptionClass extends Characteristic {
 		constructor() {
 			super('Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+			// Use literal format/perms values compatible with HAP v2 to avoid undefined enum constants
 			this.setProps({
-				format: Characteristic.Formats.UINT16,
+				format: 'uint16',
 				unit: 'W',
 				maxValue: 100000,
 				minValue: 0,
 				minStep: 1,
-				perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+				perms: ['pr','ev']
 			});
 			this.value = this.getDefaultValue();
 		}
@@ -32,12 +33,12 @@ module.exports = (api) => {
 		constructor() {
 			super('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
 			this.setProps({
-				format: Characteristic.Formats.FLOAT,
+				format: 'float',
 				unit: 'kWh',
 				maxValue: 1000000000,
 				minValue: 0,
 				minStep: 0.001,
-				perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+				perms: ['pr','ev']
 			});
 			this.value = this.getDefaultValue();
 		}
@@ -48,12 +49,12 @@ module.exports = (api) => {
 		constructor() {
 			super('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
 			this.setProps({
-				format: Characteristic.Formats.FLOAT,
+				format: 'float',
 				unit: 'V',
 				maxValue: 1000,
 				minValue: 0,
 				minStep: 0.1,
-				perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+				perms: ['pr','ev']
 			});
 			this.value = this.getDefaultValue();
 		}
