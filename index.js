@@ -151,6 +151,22 @@ EnergyMeter.prototype.getServices = function() {
 		if (this.evePowerChar) this.evePowerChar.on('get', callback => callback(null, Math.round(this.powerConsumption)));
 		if (this.eveTotalChar) this.eveTotalChar.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
 		if (this.eveVoltageChar) this.eveVoltageChar.on('get', callback => callback(null, Number(this.voltage1)));
+
+		// Debug: enumerate characteristics on the main service so we can verify Eve sees them
+		if (this.debug_log) {
+			try {
+				this.log('Service characteristics:');
+				if (this.service && Array.isArray(this.service.characteristics)) {
+					this.service.characteristics.forEach(c => {
+						this.log(' - ' + (c.displayName || c.UUID) + ' (' + c.UUID + ') props=' + JSON.stringify(c.props || {}));
+					});
+				} else {
+					this.log(' - (no characteristics array available on service)');
+				}
+			} catch (e) {
+				this.log('Failed to enumerate service characteristics: ' + e.message);
+			}
+		}
 	} catch (e) {
 		// If custom characteristics clash on some platforms, ignore but log once
 		this.log('Eve characteristics not added: ' + e.message);
@@ -162,6 +178,29 @@ EnergyMeter.prototype.getServices = function() {
 	// Create the FakeGato history service
 	this.historyService = new FakeGatoHistoryService('energy', this);
 
+	// Secondary service: some clients (Eve) detect energy characteristics more reliably on common service types
+	try {
+		this.secondaryService = new Service.Lightbulb(this.name + ' Energy');
+		// add the Eve characteristics to the secondary service as well
+		this.secondaryService.addCharacteristic(EvePowerConsumption);
+		this.secondaryService.addCharacteristic(EveTotalConsumption);
+		this.secondaryService.addCharacteristic(EveVoltage);
+		this.evePowerChar2 = this.secondaryService.getCharacteristic(EvePowerConsumption);
+		this.eveTotalChar2 = this.secondaryService.getCharacteristic(EveTotalConsumption);
+		this.eveVoltageChar2 = this.secondaryService.getCharacteristic(EveVoltage);
+		if (this.evePowerChar2) this.evePowerChar2.on('get', callback => callback(null, Math.round(this.powerConsumption)));
+		if (this.eveTotalChar2) this.eveTotalChar2.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
+		if (this.eveVoltageChar2) this.eveVoltageChar2.on('get', callback => callback(null, Number(this.voltage1)));
+		if (this.debug_log) this.log('Added secondary Energy service with Eve characteristics');
+	} catch (e) {
+		this.log('Failed to add secondary service: ' + e.message);
+		this.secondaryService = null;
+	}
+
+	// Return services; include the secondary service if created
+	if (this.secondaryService) {
+		return [informationService, this.service, this.secondaryService, this.historyService];
+	}
 	return [informationService, this.service, this.historyService];
 };
 
@@ -319,16 +358,51 @@ EnergyMeter.prototype.updateState = function() {
 				// Update Eve custom characteristics if present so apps like Eve treat this as an energy meter
 				try {
 					if (this.evePowerChar) {
-						this.evePowerChar.setValue(Math.round(this.powerConsumption));
-						if (this.debug_log) this.log('Set EvePowerConsumption=' + Math.round(this.powerConsumption));
+						const valP = Math.round(this.powerConsumption);
+						this.service.updateCharacteristic(this.evePowerChar, valP);
+						this.evePowerChar.setValue(valP, undefined, (err) => {
+							if (err) this.log('Error setting EvePowerConsumption: ' + err);
+							if (this.debug_log) this.log('Set EvePowerConsumption=' + valP + ' (char.value=' + this.evePowerChar.value + ')');
+						});
 					}
 					if (this.eveTotalChar) {
-						this.eveTotalChar.setValue(Number(this.totalPowerConsumption));
-						if (this.debug_log) this.log('Set EveTotalConsumption=' + Number(this.totalPowerConsumption));
+						const valT = Number(this.totalPowerConsumption);
+						this.service.updateCharacteristic(this.eveTotalChar, valT);
+						this.eveTotalChar.setValue(valT, undefined, (err) => {
+							if (err) this.log('Error setting EveTotalConsumption: ' + err);
+							if (this.debug_log) this.log('Set EveTotalConsumption=' + valT + ' (char.value=' + this.eveTotalChar.value + ')');
+						});
 					}
 					if (this.eveVoltageChar) {
-						this.eveVoltageChar.setValue(Number(this.voltage1));
-						if (this.debug_log) this.log('Set EveVoltage=' + Number(this.voltage1));
+						const valV = Number(this.voltage1);
+						this.service.updateCharacteristic(this.eveVoltageChar, valV);
+						this.eveVoltageChar.setValue(valV, undefined, (err) => {
+							if (err) this.log('Error setting EveVoltage: ' + err);
+							if (this.debug_log) this.log('Set EveVoltage=' + valV + ' (char.value=' + this.eveVoltageChar.value + ')');
+						});
+					}
+					// Also update secondary service characteristics (if present)
+					try {
+						if (this.evePowerChar2) {
+							const valP2 = Math.round(this.powerConsumption);
+							this.secondaryService.updateCharacteristic(this.evePowerChar2, valP2);
+							this.evePowerChar2.setValue(valP2);
+							if (this.debug_log) this.log('Set EvePowerConsumption (secondary)=' + valP2 + ' (char.value=' + this.evePowerChar2.value + ')');
+						}
+						if (this.eveTotalChar2) {
+							const valT2 = Number(this.totalPowerConsumption);
+							this.secondaryService.updateCharacteristic(this.eveTotalChar2, valT2);
+							this.eveTotalChar2.setValue(valT2);
+							if (this.debug_log) this.log('Set EveTotalConsumption (secondary)=' + valT2 + ' (char.value=' + this.eveTotalChar2.value + ')');
+						}
+						if (this.eveVoltageChar2) {
+							const valV2 = Number(this.voltage1);
+							this.secondaryService.updateCharacteristic(this.eveVoltageChar2, valV2);
+							this.eveVoltageChar2.setValue(valV2);
+							if (this.debug_log) this.log('Set EveVoltage (secondary)=' + valV2 + ' (char.value=' + this.eveVoltageChar2.value + ')');
+						}
+					} catch (e) {
+						// ignore
 					}
 				} catch (e) {
 					this.log('Error updating Eve characteristics: ' + e.message);
@@ -337,6 +411,22 @@ EnergyMeter.prototype.updateState = function() {
 			// FakeGato
 			if (this.historyService) {
 				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
+				if (this.debug_log) this.log('FakeGato addEntry power=' + this.powerConsumption);
+			}
+
+			// Debug: enumerate characteristics and show their current value after updates
+			if (this.debug_log && this.service && Array.isArray(this.service.characteristics)) {
+				try {
+					this.log('Post-update characteristic values:');
+					this.service.characteristics.forEach(c => {
+						// Some characteristics may not expose .value until accessed; guard against exceptions
+						let v = '(no value)';
+						try { v = c.value; } catch (e) { v = '(err)'; }
+						this.log(' - ' + (c.displayName || c.UUID) + ': ' + v);
+					});
+				} catch (e) {
+					this.log('Failed to enumerate characteristic values: ' + e.message);
+				}
 			}
 		} catch (parseErr) {
 			this.log('Error processing data: ' + parseErr.message);
