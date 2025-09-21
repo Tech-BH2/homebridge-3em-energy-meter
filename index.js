@@ -138,14 +138,45 @@ EnergyMeter.prototype.getServices = function() {
 	// Add Eve custom characteristics so apps (Eve) recognise power/energy/voltage for history
 	try {
 		// Pass the characteristic constructor to addCharacteristic (HAP will create instances)
-		this.service.addCharacteristic(EvePowerConsumption);
-		this.service.addCharacteristic(EveTotalConsumption);
-		this.service.addCharacteristic(EveVoltage);
-
-		// Retrieve the created characteristic instances and store them
-		this.evePowerChar = this.service.getCharacteristic(EvePowerConsumption);
-		this.eveTotalChar = this.service.getCharacteristic(EveTotalConsumption);
-		this.eveVoltageChar = this.service.getCharacteristic(EveVoltage);
+		try {
+			const c1 = this.service.addCharacteristic(EvePowerConsumption);
+			const c2 = this.service.addCharacteristic(EveTotalConsumption);
+			const c3 = this.service.addCharacteristic(EveVoltage);
+			this.evePowerChar = c1 || this.service.getCharacteristic(EvePowerConsumption);
+			this.eveTotalChar = c2 || this.service.getCharacteristic(EveTotalConsumption);
+			this.eveVoltageChar = c3 || this.service.getCharacteristic(EveVoltage);
+			if (this.debug_log) {
+				this.log('addCharacteristic returned: evePowerChar=' + !!this.evePowerChar + ', eveTotalChar=' + !!this.eveTotalChar + ', eveVoltageChar=' + !!this.eveVoltageChar);
+			}
+		} catch (e) {
+			this.log('addCharacteristic error on main service: ' + e.message);
+			this.evePowerChar = null;
+			this.eveTotalChar = null;
+			this.eveVoltageChar = null;
+		}
+		// Fallback: if addCharacteristic didn't create chars, try creating instances directly
+		if (!this.evePowerChar || !this.eveTotalChar || !this.eveVoltageChar) {
+			try {
+				if (!this.evePowerChar) {
+					const instP = new EvePowerConsumption();
+					this.service.addCharacteristic(instP);
+					this.evePowerChar = this.service.getCharacteristic(instP.UUID) || instP;
+				}
+				if (!this.eveTotalChar) {
+					const instT = new EveTotalConsumption();
+					this.service.addCharacteristic(instT);
+					this.eveTotalChar = this.service.getCharacteristic(instT.UUID) || instT;
+				}
+				if (!this.eveVoltageChar) {
+					const instV = new EveVoltage();
+					this.service.addCharacteristic(instV);
+					this.eveVoltageChar = this.service.getCharacteristic(instV.UUID) || instV;
+				}
+				if (this.debug_log) this.log('Fallback instance creation done: evePowerChar=' + !!this.evePowerChar + ', eveTotalChar=' + !!this.eveTotalChar + ', eveVoltageChar=' + !!this.eveVoltageChar);
+			} catch (e) {
+				this.log('Fallback characteristic instance creation failed: ' + e.message);
+			}
+		}
 
 		// Provide simple getters for these
 		if (this.evePowerChar) this.evePowerChar.on('get', callback => callback(null, Math.round(this.powerConsumption)));
@@ -182,12 +213,43 @@ EnergyMeter.prototype.getServices = function() {
 	try {
 		this.secondaryService = new Service.Lightbulb(this.name + ' Energy');
 		// add the Eve characteristics to the secondary service as well
-		this.secondaryService.addCharacteristic(EvePowerConsumption);
-		this.secondaryService.addCharacteristic(EveTotalConsumption);
-		this.secondaryService.addCharacteristic(EveVoltage);
-		this.evePowerChar2 = this.secondaryService.getCharacteristic(EvePowerConsumption);
-		this.eveTotalChar2 = this.secondaryService.getCharacteristic(EveTotalConsumption);
-		this.eveVoltageChar2 = this.secondaryService.getCharacteristic(EveVoltage);
+		try {
+			const s1 = this.secondaryService.addCharacteristic(EvePowerConsumption);
+			const s2 = this.secondaryService.addCharacteristic(EveTotalConsumption);
+			const s3 = this.secondaryService.addCharacteristic(EveVoltage);
+			this.evePowerChar2 = s1 || this.secondaryService.getCharacteristic(EvePowerConsumption);
+			this.eveTotalChar2 = s2 || this.secondaryService.getCharacteristic(EveTotalConsumption);
+			this.eveVoltageChar2 = s3 || this.secondaryService.getCharacteristic(EveVoltage);
+			if (this.debug_log) this.log('addCharacteristic returned for secondary: evePowerChar2=' + !!this.evePowerChar2 + ', eveTotalChar2=' + !!this.eveTotalChar2 + ', eveVoltageChar2=' + !!this.eveVoltageChar2);
+		} catch (e) {
+			this.log('addCharacteristic error on secondary service: ' + e.message);
+			this.evePowerChar2 = null;
+			this.eveTotalChar2 = null;
+			this.eveVoltageChar2 = null;
+		}
+		// Fallback for secondary service
+		if (!this.evePowerChar2 || !this.eveTotalChar2 || !this.eveVoltageChar2) {
+			try {
+				if (!this.evePowerChar2) {
+					const iP2 = new EvePowerConsumption();
+					this.secondaryService.addCharacteristic(iP2);
+					this.evePowerChar2 = this.secondaryService.getCharacteristic(iP2.UUID) || iP2;
+				}
+				if (!this.eveTotalChar2) {
+					const iT2 = new EveTotalConsumption();
+					this.secondaryService.addCharacteristic(iT2);
+					this.eveTotalChar2 = this.secondaryService.getCharacteristic(iT2.UUID) || iT2;
+				}
+				if (!this.eveVoltageChar2) {
+					const iV2 = new EveVoltage();
+					this.secondaryService.addCharacteristic(iV2);
+					this.eveVoltageChar2 = this.secondaryService.getCharacteristic(iV2.UUID) || iV2;
+				}
+				if (this.debug_log) this.log('Fallback instance creation for secondary done: evePowerChar2=' + !!this.evePowerChar2 + ', eveTotalChar2=' + !!this.eveTotalChar2 + ', eveVoltageChar2=' + !!this.eveVoltageChar2);
+			} catch (e) {
+				this.log('Fallback characteristic instance creation failed (secondary): ' + e.message);
+			}
+		}
 		if (this.evePowerChar2) this.evePowerChar2.on('get', callback => callback(null, Math.round(this.powerConsumption)));
 		if (this.eveTotalChar2) this.eveTotalChar2.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
 		if (this.eveVoltageChar2) this.eveVoltageChar2.on('get', callback => callback(null, Number(this.voltage1)));
@@ -198,10 +260,62 @@ EnergyMeter.prototype.getServices = function() {
 	}
 
 	// Return services; include the secondary service if created
-	if (this.secondaryService) {
-		return [informationService, this.service, this.secondaryService, this.historyService];
+	// Debug: enumerate all services and their characteristics so we can see where Eve chars live
+	if (this.debug_log) {
+		try {
+			this.log('Accessory services and characteristics:');
+			const services = [informationService, this.service];
+			if (this.secondaryService) services.push(this.secondaryService);
+			if (this.historyService) services.push(this.historyService);
+			services.forEach(svc => {
+				try {
+					this.log('Service: ' + (svc.displayName || svc.UUID || svc.constructor && svc.constructor.name));
+					if (Array.isArray(svc.characteristics)) {
+						svc.characteristics.forEach(ch => this.log('  - Char: ' + (ch.displayName || ch.UUID) + ' (' + ch.UUID + ')'));
+					} else {
+						this.log('  - (no characteristics array)');
+					}
+				} catch (e) {
+					this.log('  - Failed to enumerate service chars: ' + e.message);
+				}
+			});
+			this.log('Eve characteristic objects present: main=' + !!this.evePowerChar + ',' + !!this.eveTotalChar + ',' + !!this.eveVoltageChar + ' ; secondary=' + !!this.evePowerChar2 + ',' + !!this.eveTotalChar2 + ',' + !!this.eveVoltageChar2);
+		} catch (e) {
+			this.log('Failed to enumerate services: ' + e.message);
+		}
 	}
-	return [informationService, this.service, this.historyService];
+	if (this.secondaryService) {
+		// Add a compatibility Switch service (some apps detect energy on switches)
+		try {
+			this.switchService = new Service.Switch(this.name + ' Energy Switch');
+			this.switchService.addCharacteristic(EvePowerConsumption);
+			this.switchService.addCharacteristic(EveTotalConsumption);
+			this.switchService.addCharacteristic(EveVoltage);
+			this.evePowerChar3 = this.switchService.getCharacteristic(EvePowerConsumption);
+			this.eveTotalChar3 = this.switchService.getCharacteristic(EveTotalConsumption);
+			this.eveVoltageChar3 = this.switchService.getCharacteristic(EveVoltage);
+			if (this.debug_log) this.log('Added compatibility Switch service with Eve characteristics');
+			return [informationService, this.service, this.secondaryService, this.switchService, this.historyService];
+		} catch (e) {
+			this.log('Failed to add compatibility Switch service: ' + e.message);
+			return [informationService, this.service, this.secondaryService, this.historyService];
+		}
+	}
+	// If no secondary service, still add the switch shim
+	try {
+		this.switchService = new Service.Switch(this.name + ' Energy Switch');
+		this.switchService.addCharacteristic(EvePowerConsumption);
+		this.switchService.addCharacteristic(EveTotalConsumption);
+		this.switchService.addCharacteristic(EveVoltage);
+		this.evePowerChar3 = this.switchService.getCharacteristic(EvePowerConsumption);
+		this.eveTotalChar3 = this.switchService.getCharacteristic(EveTotalConsumption);
+		this.eveVoltageChar3 = this.switchService.getCharacteristic(EveVoltage);
+		if (this.debug_log) this.log('Added compatibility Switch service with Eve characteristics (no secondary)');
+		return [informationService, this.service, this.switchService, this.historyService];
+	} catch (e) {
+		this.log('Failed to add compatibility Switch service (no secondary): ' + e.message);
+		return [informationService, this.service, this.historyService];
+	}
 };
 
 EnergyMeter.prototype.updateState = function() {
@@ -400,6 +514,29 @@ EnergyMeter.prototype.updateState = function() {
 							this.secondaryService.updateCharacteristic(this.eveVoltageChar2, valV2);
 							this.eveVoltageChar2.setValue(valV2);
 							if (this.debug_log) this.log('Set EveVoltage (secondary)=' + valV2 + ' (char.value=' + this.eveVoltageChar2.value + ')');
+						}
+					} catch (e) {
+						// ignore
+					}
+					// Also update switch shim characteristics (if present)
+					try {
+						if (this.evePowerChar3 && this.switchService) {
+							const valP3 = Math.round(this.powerConsumption);
+							this.switchService.updateCharacteristic(this.evePowerChar3, valP3);
+							this.evePowerChar3.setValue(valP3);
+							if (this.debug_log) this.log('Set EvePowerConsumption (switch)=' + valP3 + ' (char.value=' + this.evePowerChar3.value + ')');
+						}
+						if (this.eveTotalChar3 && this.switchService) {
+							const valT3 = Number(this.totalPowerConsumption);
+							this.switchService.updateCharacteristic(this.eveTotalChar3, valT3);
+							this.eveTotalChar3.setValue(valT3);
+							if (this.debug_log) this.log('Set EveTotalConsumption (switch)=' + valT3 + ' (char.value=' + this.eveTotalChar3.value + ')');
+						}
+						if (this.eveVoltageChar3 && this.switchService) {
+							const valV3 = Number(this.voltage1);
+							this.switchService.updateCharacteristic(this.eveVoltageChar3, valV3);
+							this.eveVoltageChar3.setValue(valV3);
+							if (this.debug_log) this.log('Set EveVoltage (switch)=' + valV3 + ' (char.value=' + this.eveVoltageChar3.value + ')');
 						}
 					} catch (e) {
 						// ignore
