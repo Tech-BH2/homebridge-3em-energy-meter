@@ -1,3 +1,4 @@
+
 const inherits = require('util').inherits;
 const request = require('request');
 const version = require('./package.json').version;
@@ -266,16 +267,18 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 		// Add FakeGato history bound to the platform accessory
 		try {
 			// Use the same FakeGatoHistoryService constructor used elsewhere in the plugin
-			const historyService = new FakeGatoHistoryService('energy', accessory);
+			accessory.log = this.log;
+					const historyService = new FakeGatoHistoryService('energy', accessory);
 			try {
 				// Only add the FakeGato service to the accessory if it doesn't already exist.
 				// Some restore/restore-cached scenarios will already have the service, and
 				// calling addService again can throw "Cannot add a Service with the same UUID"
 				const existing = accessory.getService && (accessory.getService(historyService.UUID) || accessory.getService('E863F007-079E-48FF-8F27-9C2605A29F52'));
-				if (!existing) {
-				} else {
-					if (this.log) this.log('ThreeEmPlatform: FakeGato service already present on accessory, skipping addService');
-				}
+                if (!existing) {
+                    try { accessory.addService(historyService); } catch (e) { if (this.log) this.log('ThreeEmPlatform: accessory.addService(historyService) failed: ' + e.message); }
+                } else {
+                    if (this.log) this.log('ThreeEmPlatform: FakeGato service already present on accessory, skipping addService');
+                }
 			} catch (e) {
 			}
 			// Always store the history instance on context for later updates by the shared poller
@@ -316,7 +319,8 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 							if (!json.emeters[idx]) return;
 							const ch = json.emeters[idx];
 							const power = parseFloat(ch.power || 0);
-							const total = parseFloat(ch.total || 0) / 1000;
+							const totalWh = parseFloat(ch.total || 0); // Shelly reports total in Wh
+							const total = (totalWh / 1000); // kWh for characteristic display
 							const voltage = parseFloat(ch.voltage || 0);
 
 							// Update Eve characteristics safely
@@ -339,7 +343,7 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 							hist.addEntry({
 								time: Math.round(new Date().valueOf() / 1000),
 								power: power,                                        // W
-								energy: Math.round(total) // Wh (fixed)                                        // cumulative kWh (already /1000 above)
+								energy: Math.round(totalWh) // Wh (fixed)                                        // cumulative kWh (already /1000 above)
 							});
 							}
 							} catch (e) { /* ignore history errors */ }
