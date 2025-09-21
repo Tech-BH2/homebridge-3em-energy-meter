@@ -96,29 +96,20 @@ ThreeEmPlatform.prototype.configureAccessory = function(accessory) {
 };
 
 ThreeEmPlatform.prototype.didFinishLaunching = function() {
-	// Only create auto accessories if the UI option is enabled
-	if (!this.config || !this.config.add_channel_accessory) {
-		if (this.log) this.log('ThreeEmPlatform: auto-create disabled (add_channel_accessory=false)');
+	// Auto-create accessories when `split_channels` is enabled in the platform config
+	if (!this.config || !this.config.split_channels) {
+		if (this.log) this.log('ThreeEmPlatform: auto-create disabled (split_channels=false)');
 		return;
 	}
 
-	// Determine which channels to create:
-	// - If split_channels is true and this is a Shelly EM, create channel 1 and 2 accessories.
-	// - Otherwise use explicit checkboxes expose_channel_1/2/3.
-	// - If none selected, fall back to the legacy `channel` field.
+	// We're in split_channels mode — only relevant for Shelly EM devices.
+	// Create channel 1 (index 0) and channel 2 (index 1) accessories when using a Shelly EM.
 	const channelsToCreate = [];
-	if (this.config.split_channels && this.config.use_em) {
-		// create channel 1 and channel 2
+	if (this.config.use_em) {
 		channelsToCreate.push(0);
 		channelsToCreate.push(1);
 	} else {
-		if (this.config.expose_channel_1) channelsToCreate.push(0);
-		if (this.config.expose_channel_2) channelsToCreate.push(1);
-		if (this.config.expose_channel_3) channelsToCreate.push(2);
-		if (channelsToCreate.length === 0 && this.config.channel) {
-			const single = Math.max(1, Math.min(3, Number(this.config.channel || 2))) - 1;
-			channelsToCreate.push(single);
-		}
+		if (this.log) this.log('ThreeEmPlatform: split_channels enabled but use_em is false; nothing to create.');
 	}
 
 	if (channelsToCreate.length === 0) {
@@ -131,6 +122,9 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 	const updateInterval = Number(this.config.update_interval || 10000);
 	const opsBase = { uri: 'http://' + (this.config.ip || '127.0.0.1') + '/status/emeters?', method: 'GET', timeout: Number(this.config.timeout || 5000) };
 	const self = this;
+
+	// store created platform accessories so the shared poller can update them
+	this.platformAccessories = this.platformAccessories || [];
 
 	channelsToCreate.forEach(channelIndex => {
 		const uuidSeed = serial + '-ch' + channelIndex;
@@ -164,9 +158,15 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 
 		// Add FakeGato history bound to the platform accessory
 		try {
-			const history = new this.FakeGato('energy', accessory);
+			// Use the same FakeGatoHistoryService constructor used elsewhere in the plugin
+			const historyService = new FakeGatoHistoryService('energy', accessory);
+			try {
+				accessory.addService(historyService);
+			} catch (e) {
+				if (this.log) this.log('ThreeEmPlatform: accessory.addService(historyService) failed: ' + e.message);
+			}
 			// store on context for later updates
-			accessory.context._fakegato = history;
+			accessory.context._fakegato = historyService;
 		} catch (e) {
 			this.log('ThreeEmPlatform: failed to create FakeGato on auto accessory: ' + e.message);
 		}
@@ -182,46 +182,61 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 			return;
 		}
 
-		// Polling loop to update this accessory's values (independent small poller)
-		const poll = function() {
+		// store accessory + channelIndex for the shared poller
+		this.platformAccessories.push({ accessory: accessory, channelIndex: channelIndex, lightService: light });
+	});
+
+	// If any platform accessories were created, start a single poller to update all of them
+	if (this.platformAccessories && this.platformAccessories.length > 0) {
+		const pollAll = function() {
 			const ops = Object.assign({}, opsBase);
 			if (self.config.auth) ops.auth = { user: self.config.auth.user, pass: self.config.auth.pass };
 			request(ops, (err, res, body) => {
-				if (err) { self.log('ThreeEmPlatform auto accessory poll error: ' + err.message); return; }
+				if (err) { self.log('ThreeEmPlatform shared poll error: ' + err.message); return; }
 				try {
 					const json = JSON.parse(body);
-					if (!Array.isArray(json.emeters) || json.emeters.length <= channelIndex) return;
-					const ch = json.emeters[channelIndex];
-					const power = parseFloat(ch.power || 0);
-					const total = parseFloat(ch.total || 0) / 1000;
-					const voltage = parseFloat(ch.voltage || 0);
+					if (!Array.isArray(json.emeters)) return;
 
-					// Update characteristics
-					try {
-						const p = light.getCharacteristic(EvePowerConsumption);
-						const t = light.getCharacteristic(EveTotalConsumption);
-						const v = light.getCharacteristic(EveVoltage);
-						if (p) { try { light.updateCharacteristic(p, Math.round(power)); } catch(_){}; try { p.setValue(Math.round(power)); } catch(_){} }
-						if (t) { try { light.updateCharacteristic(t, Number(total)); } catch(_){}; try { t.setValue(Number(total)); } catch(_){} }
-						if (v) { try { light.updateCharacteristic(v, Number(voltage)); } catch(_){}; try { v.setValue(Number(voltage)); } catch(_){} }
-					} catch (e) { self.log('ThreeEmPlatform char update error: ' + e.message); }
+					self.platformAccessories.forEach(item => {
+						try {
+							const idx = item.channelIndex;
+							if (!json.emeters[idx]) return;
+							const ch = json.emeters[idx];
+							const power = parseFloat(ch.power || 0);
+							const total = parseFloat(ch.total || 0) / 1000;
+							const voltage = parseFloat(ch.voltage || 0);
 
-					// FakeGato add entry if present
-					try {
-						const hist = accessory.context && accessory.context._fakegato;
-						if (hist && typeof hist.addEntry === 'function') {
-							hist.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: power });
+							// Update Eve characteristics safely
+							try {
+								const light = item.lightService;
+								const p = light.getCharacteristic && light.getCharacteristic(EvePowerConsumption);
+								const t = light.getCharacteristic && light.getCharacteristic(EveTotalConsumption);
+								const v = light.getCharacteristic && light.getCharacteristic(EveVoltage);
+								if (p) { try { light.updateCharacteristic(p, Math.round(power)); } catch(_){}; try { p.setValue(Math.round(power)); } catch(_){} }
+								if (t) { try { light.updateCharacteristic(t, Number(total)); } catch(_){}; try { t.setValue(Number(total)); } catch(_){} }
+								if (v) { try { light.updateCharacteristic(v, Number(voltage)); } catch(_){}; try { v.setValue(Number(voltage)); } catch(_){} }
+							} catch (e) { self.log('ThreeEmPlatform char update error: ' + e.message); }
+
+							// FakeGato add entry if present
+							try {
+								const acc = item.accessory;
+								const hist = acc && acc.context && acc.context._fakegato;
+								if (hist && typeof hist.addEntry === 'function') {
+									hist.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: power });
+								}
+							} catch (e) { /* ignore history errors */ }
+						} catch (e) {
+							self.log('ThreeEmPlatform per-item update error: ' + e.message);
 						}
-					} catch (e) { /* ignore history errors */ }
+					});
 				} catch (e) {
-					self.log('ThreeEmPlatform parse error: ' + e.message);
+					self.log('ThreeEmPlatform shared poll parse error: ' + e.message);
 				}
 			});
 		};
-		// immediate poll and interval
-		try { poll(); } catch (e) {}
-		setInterval(poll, updateInterval);
-	});
+		try { pollAll(); } catch (e) {}
+		setInterval(pollAll, updateInterval);
+	}
 };
 
 // ...existing code...
