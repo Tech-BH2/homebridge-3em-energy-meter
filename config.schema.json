@@ -14,6 +14,46 @@
         "default": "platform",
         "description": "Choose whether to expose as standalone accessory or as platform (with optional split channels)."
       }
+          "ip": {
+      "type": "string",
+      "title": "Shelly 3EM IP Address",
+      "description": "The IP address of your Shelly 3EM device.",
+      "format": "ipv4",
+      "minLength": 7,
+      "maxLength": 15,
+      "default": "192.168.1.100"
+    },
+    "username": {
+      "type": "string",
+      "title": "Username",
+      "description": "The username for the Shelly 3EM device (if authentication is enabled).",
+      "default": "admin"
+    },
+    "password": {
+      "type": "string",
+      "title": "Password",
+      "description": "The password for the Shelly 3EM device (if authentication is enabled).",
+      "default": "admin"
+    },
+    "channels": {
+      "type": "array",
+      "title": "Channels",
+      "description": "List of channels to monitor. Valid values are 1 and 2.",
+      "items": {
+        "type": "integer",
+        "enum": [1, 2]
+      },
+      "default": [1, 2]
+    },
+    "updateInterval": {
+      "type": "integer",
+      "title": "Update Interval",
+      "description": "The interval (in milliseconds) between data updates.",
+      "default": 5000,
+      "minimum": 1000,
+      "maximum": 60000
+    }
+  }
     },
     "allOf": [
       {
