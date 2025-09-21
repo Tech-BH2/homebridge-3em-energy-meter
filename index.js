@@ -97,6 +97,11 @@ ThreeEmPlatform.prototype.configureAccessory = function(accessory) {
 
 ThreeEmPlatform.prototype.didFinishLaunching = function() {
 	// Auto-create accessories when `split_channels` is enabled in the platform config
+	try {
+		if (this.log) this.log('ThreeEmPlatform: didFinishLaunching called');
+		if (this.config && this.config.debug_log) this.log('ThreeEmPlatform: platform config: ' + JSON.stringify(this.config));
+	} catch (e) { if (this.log) this.log('ThreeEmPlatform: debug log failed: ' + e.message); }
+
 	if (!this.config || !this.config.split_channels) {
 		if (this.log) this.log('ThreeEmPlatform: auto-create disabled (split_channels=false)');
 		return;
@@ -111,6 +116,8 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 	} else {
 		if (this.log) this.log('ThreeEmPlatform: split_channels enabled but use_em is false; nothing to create.');
 	}
+
+	if (this.config && this.config.debug_log) this.log('ThreeEmPlatform: channelsToCreate=' + JSON.stringify(channelsToCreate));
 
 	if (channelsToCreate.length === 0) {
 		if (this.log) this.log('ThreeEmPlatform: no channels selected for auto-creation');
@@ -131,6 +138,7 @@ ThreeEmPlatform.prototype.didFinishLaunching = function() {
 		const uuid = this.api.hap.uuid.generate(uuidSeed);
 
 		// If accessory already cached, skip creation
+		if (this.config && this.config.debug_log) this.log('ThreeEmPlatform: preparing to create accessory for channel ' + channelIndex + ' with uuidSeed=' + uuidSeed + ' uuid=' + uuid);
 		if (this.cachedAccessories && this.cachedAccessories[uuid]) {
 			this.log('ThreeEmPlatform: channel accessory already configured (UUID=' + uuid + '), skipping creation.');
 			return;
