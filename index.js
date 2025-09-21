@@ -408,22 +408,28 @@ EnergyMeter.prototype.updateState = function() {
 				if (this.debug_log) this.log('FakeGato addEntry power=' + this.powerConsumption);
 			}
 
-			// Update energy service Eve characteristics if present
+			// Update energy service Eve characteristics safely: retrieve actual characteristic instances from the service
 			try {
-				if (this.evePowerChar) {
-					const valP = Math.round(this.powerConsumption);
-					this.energyService && this.energyService.updateCharacteristic(this.evePowerChar, valP);
-					this.evePowerChar.setValue(valP, undefined, (err) => { if (err) this.log('Error setting evePowerChar: ' + err); });
-				}
-				if (this.eveTotalChar) {
-					const valT = Number(this.totalPowerConsumption);
-					this.energyService && this.energyService.updateCharacteristic(this.eveTotalChar, valT);
-					this.eveTotalChar.setValue(valT, undefined, (err) => { if (err) this.log('Error setting eveTotalChar: ' + err); });
-				}
-				if (this.eveVoltageChar) {
-					const valV = Number(this.voltage1);
-					this.energyService && this.energyService.updateCharacteristic(this.eveVoltageChar, valV);
-					this.eveVoltageChar.setValue(valV, undefined, (err) => { if (err) this.log('Error setting eveVoltageChar: ' + err); });
+				if (this.energyService) {
+					// getCharacteristic accepts a constructor or UUID in HAP; try both
+					const chP = (this.energyService.getCharacteristic && this.energyService.getCharacteristic(EvePowerConsumption)) || null;
+					const chT = (this.energyService.getCharacteristic && this.energyService.getCharacteristic(EveTotalConsumption)) || null;
+					const chV = (this.energyService.getCharacteristic && this.energyService.getCharacteristic(EveVoltage)) || null;
+					if (chP) {
+						const valP = Math.round(this.powerConsumption);
+						try { this.energyService.updateCharacteristic(chP, valP); } catch(_){}
+						try { chP.setValue(valP); } catch (e) { if (this.debug_log) this.log('chP.setValue error: ' + e.message); }
+					}
+					if (chT) {
+						const valT = Number(this.totalPowerConsumption);
+						try { this.energyService.updateCharacteristic(chT, valT); } catch(_){}
+						try { chT.setValue(valT); } catch (e) { if (this.debug_log) this.log('chT.setValue error: ' + e.message); }
+					}
+					if (chV) {
+						const valV = Number(this.voltage1);
+						try { this.energyService.updateCharacteristic(chV, valV); } catch(_){}
+						try { chV.setValue(valV); } catch (e) { if (this.debug_log) this.log('chV.setValue error: ' + e.message); }
+					}
 				}
 			} catch (e) {
 				this.log('Error updating energy service characteristics: ' + e.message);
