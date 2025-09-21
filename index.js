@@ -12,47 +12,53 @@ module.exports = (api) => {
 	FakeGatoHistoryService = require('fakegato-history')(api);
 
 	// Define Eve custom characteristics now that Characteristic is available
-	EvePowerConsumption = function () {
-		Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-		this.setProps({
-			format: Characteristic.Formats.UINT16,
-			unit: 'W',
-			maxValue: 100000,
-			minValue: 0,
-			minStep: 1,
-			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-		});
-		this.value = this.getDefaultValue();
-	};
-	inherits(EvePowerConsumption, Characteristic);
+	class EvePowerConsumptionClass extends Characteristic {
+		constructor() {
+			super('Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+			this.setProps({
+				format: Characteristic.Formats.UINT16,
+				unit: 'W',
+				maxValue: 100000,
+				minValue: 0,
+				minStep: 1,
+				perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+			});
+			this.value = this.getDefaultValue();
+		}
+	}
+	EvePowerConsumption = EvePowerConsumptionClass;
 
-	EveTotalConsumption = function () {
-		Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-		this.setProps({
-			format: Characteristic.Formats.FLOAT,
-			unit: 'kWh',
-			maxValue: 1000000000,
-			minValue: 0,
-			minStep: 0.001,
-			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-		});
-		this.value = this.getDefaultValue();
-	};
-	inherits(EveTotalConsumption, Characteristic);
+	class EveTotalConsumptionClass extends Characteristic {
+		constructor() {
+			super('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+			this.setProps({
+				format: Characteristic.Formats.FLOAT,
+				unit: 'kWh',
+				maxValue: 1000000000,
+				minValue: 0,
+				minStep: 0.001,
+				perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+			});
+			this.value = this.getDefaultValue();
+		}
+	}
+	EveTotalConsumption = EveTotalConsumptionClass;
 
-	EveVoltage = function () {
-		Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-		this.setProps({
-			format: Characteristic.Formats.FLOAT,
-			unit: 'V',
-			maxValue: 1000,
-			minValue: 0,
-			minStep: 0.1,
-			perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-		});
-		this.value = this.getDefaultValue();
-	};
-	inherits(EveVoltage, Characteristic);
+	class EveVoltageClass extends Characteristic {
+		constructor() {
+			super('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+			this.setProps({
+				format: Characteristic.Formats.FLOAT,
+				unit: 'V',
+				maxValue: 1000,
+				minValue: 0,
+				minStep: 0.1,
+				perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+			});
+			this.value = this.getDefaultValue();
+		}
+	}
+	EveVoltage = EveVoltageClass;
 
 	api.registerAccessory('3EMEnergyMeter', EnergyMeter);
 };
@@ -89,6 +95,13 @@ function EnergyMeter(log, config, api) {
 	setInterval(() => {
 		this.updateState && this.updateState();
 	}, this.update_interval);
+
+	// Do one immediate poll so values appear quickly after startup
+	try {
+		this.updateState && this.updateState();
+	} catch (e) {
+		this.log('Initial updateState failed: ' + e.message);
+	}
 }
 
 EnergyMeter.prototype.getServices = function() {
@@ -124,20 +137,26 @@ EnergyMeter.prototype.getServices = function() {
 
 	// Add Eve custom characteristics so apps (Eve) recognise power/energy/voltage for history
 	try {
-		this.service.addCharacteristic(new EvePowerConsumption());
-		this.service.addCharacteristic(new EveTotalConsumption());
-		this.service.addCharacteristic(new EveVoltage());
+		// Pass the characteristic constructor to addCharacteristic (HAP will create instances)
+		this.service.addCharacteristic(EvePowerConsumption);
+		this.service.addCharacteristic(EveTotalConsumption);
+		this.service.addCharacteristic(EveVoltage);
+
+		// Retrieve the created characteristic instances and store them
+		this.evePowerChar = this.service.getCharacteristic(EvePowerConsumption);
+		this.eveTotalChar = this.service.getCharacteristic(EveTotalConsumption);
+		this.eveVoltageChar = this.service.getCharacteristic(EveVoltage);
 
 		// Provide simple getters for these
-		this.service.getCharacteristic(EvePowerConsumption)
-			.on('get', callback => callback(null, Math.round(this.powerConsumption)));
-		this.service.getCharacteristic(EveTotalConsumption)
-			.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
-		this.service.getCharacteristic(EveVoltage)
-			.on('get', callback => callback(null, Number(this.voltage1)));
+		if (this.evePowerChar) this.evePowerChar.on('get', callback => callback(null, Math.round(this.powerConsumption)));
+		if (this.eveTotalChar) this.eveTotalChar.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
+		if (this.eveVoltageChar) this.eveVoltageChar.on('get', callback => callback(null, Number(this.voltage1)));
 	} catch (e) {
-		// If custom characteristics clash on some platforms, ignore silently
+		// If custom characteristics clash on some platforms, ignore but log once
 		this.log('Eve characteristics not added: ' + e.message);
+		this.evePowerChar = null;
+		this.eveTotalChar = null;
+		this.eveVoltageChar = null;
 	}
 
 	// Create the FakeGato history service
