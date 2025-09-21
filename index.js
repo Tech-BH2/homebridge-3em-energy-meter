@@ -212,12 +212,63 @@ EnergyMeter.prototype.getServices = function() {
 	// Create the FakeGato history service (keep history available)
 	this.historyService = new FakeGatoHistoryService('energy', this);
 
-	if (this.debug_log) {
-		this.log('Energy services removed: accessory will only publish AccessoryInformation and FakeGato history (use the energy-only accessory for live values).');
+	// Provide a single visible Lightbulb service that exposes Eve energy characteristics so clients (Eve) can discover energy data.
+	try {
+		this.energyService = new Service.Lightbulb(this.name + ' Energy');
+		// Add Eve custom characteristics to the energy service
+		try {
+			const c1 = this.energyService.addCharacteristic(EvePowerConsumption);
+			const c2 = this.energyService.addCharacteristic(EveTotalConsumption);
+			const c3 = this.energyService.addCharacteristic(EveVoltage);
+			this.evePowerChar = c1 || this.energyService.getCharacteristic(EvePowerConsumption);
+			this.eveTotalChar = c2 || this.energyService.getCharacteristic(EveTotalConsumption);
+			this.eveVoltageChar = c3 || this.energyService.getCharacteristic(EveVoltage);
+			if (this.debug_log) this.log('Energy service addCharacteristic returned: evePowerChar=' + !!this.evePowerChar + ', eveTotalChar=' + !!this.eveTotalChar + ', eveVoltageChar=' + !!this.eveVoltageChar);
+		} catch (e) {
+			this.log('Energy service addCharacteristic error: ' + e.message);
+			this.evePowerChar = null; this.eveTotalChar = null; this.eveVoltageChar = null;
+		}
+		// Fallback: direct instance creation
+		if (!this.evePowerChar || !this.eveTotalChar || !this.eveVoltageChar) {
+			try {
+				if (!this.evePowerChar) {
+					const instP = new EvePowerConsumption();
+					this.energyService.addCharacteristic(instP);
+					this.evePowerChar = this.energyService.getCharacteristic(instP.UUID) || instP;
+				}
+				if (!this.eveTotalChar) {
+					const instT = new EveTotalConsumption();
+					this.energyService.addCharacteristic(instT);
+					this.eveTotalChar = this.energyService.getCharacteristic(instT.UUID) || instT;
+				}
+				if (!this.eveVoltageChar) {
+					const instV = new EveVoltage();
+					this.energyService.addCharacteristic(instV);
+					this.eveVoltageChar = this.energyService.getCharacteristic(instV.UUID) || instV;
+				}
+				if (this.debug_log) this.log('Energy service fallback instances created: evePowerChar=' + !!this.evePowerChar + ', eveTotalChar=' + !!this.eveTotalChar + ', eveVoltageChar=' + !!this.eveVoltageChar);
+			} catch (e) {
+				this.log('Energy service fallback creation failed: ' + e.message);
+			}
+		}
+		// Provide getters so HomeKit can read values
+		if (this.evePowerChar) this.evePowerChar.on('get', callback => callback(null, Math.round(this.powerConsumption)));
+		if (this.eveTotalChar) this.eveTotalChar.on('get', callback => callback(null, Number(this.totalPowerConsumption)));
+		if (this.eveVoltageChar) this.eveVoltageChar.on('get', callback => callback(null, Number(this.voltage1)));
+	} catch (e) {
+		this.log('Failed to create energy service: ' + e.message);
+		this.energyService = null;
 	}
 
-	// Return only information and history services. The separate energy-only accessory exposes Eve energy characteristics.
-	return [informationService, this.historyService];
+	if (this.debug_log) {
+		this.log('Energy service present: ' + !!this.energyService + ' ; history present: ' + !!this.historyService);
+	}
+
+	// Return information, energy service (if created), and history
+	const services = [informationService];
+	if (this.energyService) services.push(this.energyService);
+	if (this.historyService) services.push(this.historyService);
+	return services;
 };
 
 EnergyMeter.prototype.updateState = function() {
@@ -355,6 +406,27 @@ EnergyMeter.prototype.updateState = function() {
 			if (this.historyService) {
 				this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), power: this.powerConsumption });
 				if (this.debug_log) this.log('FakeGato addEntry power=' + this.powerConsumption);
+			}
+
+			// Update energy service Eve characteristics if present
+			try {
+				if (this.evePowerChar) {
+					const valP = Math.round(this.powerConsumption);
+					this.energyService && this.energyService.updateCharacteristic(this.evePowerChar, valP);
+					this.evePowerChar.setValue(valP, undefined, (err) => { if (err) this.log('Error setting evePowerChar: ' + err); });
+				}
+				if (this.eveTotalChar) {
+					const valT = Number(this.totalPowerConsumption);
+					this.energyService && this.energyService.updateCharacteristic(this.eveTotalChar, valT);
+					this.eveTotalChar.setValue(valT, undefined, (err) => { if (err) this.log('Error setting eveTotalChar: ' + err); });
+				}
+				if (this.eveVoltageChar) {
+					const valV = Number(this.voltage1);
+					this.energyService && this.energyService.updateCharacteristic(this.eveVoltageChar, valV);
+					this.eveVoltageChar.setValue(valV, undefined, (err) => { if (err) this.log('Error setting eveVoltageChar: ' + err); });
+				}
+			} catch (e) {
+				this.log('Error updating energy service characteristics: ' + e.message);
 			}
 
 			// Debug: show computed values only
