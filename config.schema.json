@@ -1,5 +1,5 @@
 {
-"pluginAlias": "3emEnergyMeter",
+"pluginAlias": "3EMEnergyMeter",
 "pluginType": "platform",
 "headerDisplay": "This plugin integrates your Shelly 3EM energy meters into HomeKit. Each device will appear as a separate child bridge.",
 "footerDisplay": "For more information and advanced settings, please refer to the plugin documentation.",
