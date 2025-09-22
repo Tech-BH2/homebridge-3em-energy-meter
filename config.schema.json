@@ -1,81 +1,39 @@
 {
-  "pluginAlias": "3EMEnergyMeter",
-  "pluginType": "platform",
-  "singular": true,
-  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
-  "footerDisplay": "This accessory will only be supported in the third-party HomeKit app EVE.",
-  "schema": {
-    "type": "object",
-    "properties": {
-      "split_channels": {
-        "type": "boolean",
-        "title": "Split Channels",
-        "description": "Enable to create separate accessories for each channel of the Shelly 3EM.",
-        "default": false
-      },
-      "use_em": {
-        "type": "boolean",
-        "title": "Use EM Mode",
-        "description": "Enable if your device is a 2-channel Shelly EM configuration.",
-        "default": false
-      },
-      "devices": {
-        "type": "array",
-        "title": "3EM Devices",
-        "description": "Add one or more Shelly 3EM devices. Each device will create an accessory for HomeKit.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "title": "Accessory Name",
-              "default": "3EM Energy"
-            },
-            "ip": {
-              "type": "string",
-              "title": "Device IP",
-              "default": "192.168.1.100"
-            },
-            "auth": {
-              "type": "object",
-              "title": "HTTP Authentication (optional)",
-              "properties": {
-                "user": {
-                  "type": "string",
-                  "title": "Username"
-                },
-                "pass": {
-                  "type": "string",
-                  "title": "Password"
-                }
-              }
-            },
-            "serial": {
-              "type": "string",
-              "title": "Serial Number (optional)",
-              "default": ""
-            },
-            "update_interval": {
-              "type": "integer",
-              "title": "Update Interval (ms)",
-              "default": 10000,
-              "minimum": 1000
-            },
-            "debug_log": {
-              "type": "boolean",
-              "title": "Enable Debug Logging",
-              "default": false
-            }
-          },
-          "required": [
-            "name",
-            "ip"
-          ]
-        }
-      }
-    },
-    "required": [
-      "devices"
-    ]
-  }
+"pluginAlias": "3emEnergyMeter",
+"pluginType": "platform",
+"headerDisplay": "Configure your Shelly 3EM energy meters. Each meter will appear as a separate child bridge.",
+"platformSchema": {
+"type": "object",
+"properties": {
+"devices": {
+"title": "Devices",
+"type": "array",
+"items": {
+"title": "Energy Meter",
+"type": "object",
+"properties": {
+"name": {
+"title": "Name",
+"type": "string",
+"required": true,
+"placeholder": "Living Room Meter"
+},
+"ip": {
+"title": "IP Address",
+"type": "string",
+"required": true,
+"placeholder": "192.168.1.100"
+}
+}
+},
+"default": []
+},
+"updateInterval": {
+"title": "Update Interval (ms)",
+"type": "number",
+"description": "The frequency at which the plugin polls the device for new data, in milliseconds.",
+"default": 5000
+}
+}
+}
 }

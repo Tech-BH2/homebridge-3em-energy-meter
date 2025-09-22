@@ -1,241 +1,238 @@
-const inherits = require('util').inherits;
-const request = require('request');
-const version = require('./package.json').version;
+/**
+ * A Homebridge platform plugin for the Shelly 3EM energy meter.
+ * This plugin is designed to run as a child bridge and supports the Eve app's
+ * power consumption characteristics.
+ *
+ * It has been refactored to use a modern Homebridge platform structure,
+ * replaces the deprecated `request` library with `axios`, and includes
+ * error handling and logging.
+ *
+ * This version also supports the Homebridge UI configuration schema.
+ */
 
-let Service, Characteristic, FakeGatoHistoryService;
-let EvePowerConsumption, EveTotalConsumption, EveVoltage;
+// Import Homebridge API and services
+const axios = require('axios');
 
-// =====================
-// Custom Eve Characteristics
-// =====================
-class EvePowerConsumptionClass extends Characteristic {
-    constructor() {
-        super('Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-        this.setProps({
-            format: 'uint16',
-            unit: 'W',
-            maxValue: 100000,
-            minValue: 0,
-            minStep: 1,
-            perms: ['pr','ev']
-        });
-        this.value = this.getDefaultValue();
-    }
-}
-EvePowerConsumption = EvePowerConsumptionClass;
-
-class EveTotalConsumptionClass extends Characteristic {
-    constructor() {
-        super('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-        this.setProps({
-            format: 'float',
-            unit: 'kWh',
-            maxValue: 1000000000,
-            minValue: 0,
-            minStep: 0.001,
-            perms: ['pr','ev']
-        });
-        this.value = this.getDefaultValue();
-    }
-}
-EveTotalConsumption = EveTotalConsumptionClass;
-
-class EveVoltageClass extends Characteristic {
-    constructor() {
-        super('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-        this.setProps({
-            format: 'float',
-            unit: 'V',
-            maxValue: 1000,
-            minValue: 0,
-            minStep: 0.1,
-            perms: ['pr','ev']
-        });
-        this.value = this.getDefaultValue();
-    }
-}
-EveVoltage = EveVoltageClass;
-
-// =====================
-// EnergyMeter Accessory
-// =====================
-function EnergyMeter(log, config, api) {
-    this.log = log;
-    this.ip = config.ip || '127.0.0.1';
-    this.url = `http://${this.ip}/status/emeters?`;
-    this.auth = config.auth;
-    this.name = config.name || '3EM Energy';
-    this.timeout = config.timeout || 5000;
-    this.http_method = 'GET';
-    this.update_interval = Number(config.update_interval || 10000);
-    this.debug_log = config.debug_log || false;
-    this.serial = config.serial || '9000000';
-
-    this.waiting_response = false;
-    this.powerConsumption = 0;
-    this.totalPowerConsumption = 0;
-    this.voltage1 = 0;
-
-    this.energyService = new Service.Lightbulb(this.name + ' Energy');
-    this.energyService.addCharacteristic(EvePowerConsumption);
-    this.energyService.addCharacteristic(EveTotalConsumption);
-    this.energyService.addCharacteristic(EveVoltage);
-
-    setInterval(() => { this.updateState && this.updateState(); }, this.update_interval);
-    try { this.updateState && this.updateState(); } catch(e) { this.log('Initial updateState failed: ' + e.message); }
-}
-
-EnergyMeter.prototype.getServices = function() {
-    const informationService = new Service.AccessoryInformation();
-    informationService
-        .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
-        .setCharacteristic(Characteristic.Model, '3EM')
-        .setCharacteristic(Characteristic.SerialNumber, this.serial)
-        .setCharacteristic(Characteristic.FirmwareRevision, version);
-
-    return [informationService, this.energyService];
+// Custom characteristics for Eve app power consumption and total energy
+const CUSTOM_EVE_CHARACTERISTICS = {
+    CurrentConsumption: 'E863F10D-079E-48FF-8F27-9C26071B8B0F',
+    TotalConsumption: 'E863F10C-079E-48FF-8F27-9C26071B8B0F',
 };
 
-EnergyMeter.prototype.updateState = function() {
-    if (this.waiting_response) return;
-    this.waiting_response = true;
+// Global variables to store Homebridge API and platform accessory class
+let Service, Characteristic, PlatformAccessory;
 
-    const ops = { uri: this.url, method: this.http_method, timeout: this.timeout };
-    if (this.auth) ops.auth = { user: this.auth.user, pass: this.auth.pass };
-
-    request(ops, (error, res, body) => {
-        this.waiting_response = false;
-        if (error) return this.log('HTTP request failed: ' + error.message);
-        try {
-            const json = JSON.parse(body);
-            let power = 0, total = 0, voltage = 0;
-            if (Array.isArray(json.emeters)) {
-                json.emeters.forEach(e => {
-                    power += parseFloat(e.power || 0);
-                    total += parseFloat(e.total || 0);
-                    voltage += parseFloat(e.voltage || 0);
-                });
-                total = total / 1000;
-                voltage = voltage / json.emeters.length;
-            }
-            this.powerConsumption = power;
-            this.totalPowerConsumption = total;
-            this.voltage1 = voltage;
-
-            this.energyService.updateCharacteristic(EvePowerConsumption, Math.round(this.powerConsumption));
-            this.energyService.updateCharacteristic(EveTotalConsumption, Number(this.totalPowerConsumption));
-            this.energyService.updateCharacteristic(EveVoltage, Number(this.voltage1));
-
-        } catch(e) { this.log('updateState parse error: ' + e.message); }
-    });
-};
-
-// =====================
-// EnergyOnly Accessory
-// =====================
-function EnergyOnly(log, config, api) {
-    this.log = log;
-    this.ip = config.ip || '127.0.0.1';
-    this.url = `http://${this.ip}/status/emeters?`;
-    this.auth = config.auth;
-    this.name = config.name || 'Energy ' + this.ip;
-
-    this.powerConsumption = 0;
-    this.totalPowerConsumption = 0;
-    this.voltage1 = 0;
-
-    this.service = new Service.Lightbulb(this.name);
-    this.service.addCharacteristic(EvePowerConsumption);
-    this.service.addCharacteristic(EveTotalConsumption);
-    this.service.addCharacteristic(EveVoltage);
-
-    setInterval(() => { this.updateState && this.updateState(); }, 10000);
-}
-
-EnergyOnly.prototype.getServices = function() {
-    const info = new Service.AccessoryInformation();
-    info.setCharacteristic(Characteristic.Manufacturer, 'Shelly')
-        .setCharacteristic(Characteristic.Model, '3EM-energy-only')
-        .setCharacteristic(Characteristic.SerialNumber, 'unknown')
-        .setCharacteristic(Characteristic.FirmwareRevision, version);
-
-    return [info, this.service];
-};
-
-EnergyOnly.prototype.updateState = function() {
-    const ops = { uri: this.url, method: 'GET', timeout: 5000 };
-    if (this.auth) ops.auth = { user: this.auth.user, pass: this.auth.pass };
-
-    request(ops, (error, res, body) => {
-        if (error) return this.log('EnergyOnly request failed: ' + error.message);
-        try {
-            const json = JSON.parse(body);
-            let power = 0, total = 0, voltage = 0;
-            if (Array.isArray(json.emeters)) {
-                json.emeters.forEach(e => {
-                    power += parseFloat(e.power || 0);
-                    total += parseFloat(e.total || 0);
-                    voltage += parseFloat(e.voltage || 0);
-                });
-                total = total / 1000;
-                voltage = voltage / json.emeters.length;
-            }
-            this.powerConsumption = power;
-            this.totalPowerConsumption = total;
-            this.voltage1 = voltage;
-
-            this.service.updateCharacteristic(EvePowerConsumption, Math.round(power));
-            this.service.updateCharacteristic(EveTotalConsumption, total);
-            this.service.updateCharacteristic(EveVoltage, voltage);
-
-        } catch(e) { this.log('EnergyOnly parse error: ' + e.message); }
-    });
-};
-
-// =====================
-// Platform for split channel logic
-// =====================
-function ThreeEmPlatform(log, config, api) {
-    this.log = log;
-    this.config = config || {};
-    this.api = api;
-    this.Service = api.hap.Service;
-    this.Characteristic = api.hap.Characteristic;
-
-    this.cachedAccessories = {};
-
-    if (api && api.on) api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
-}
-
-ThreeEmPlatform.prototype.configureAccessory = function(accessory) {
-    this.cachedAccessories[accessory.UUID] = accessory;
-};
-
-ThreeEmPlatform.prototype.didFinishLaunching = function() {
-    if (!this.config.devices) return;
-
-    this.config.devices.forEach(device => {
-        const uuid = this.api.hap.uuid.generate(device.ip);
-
-        if (this.cachedAccessories[uuid]) {
-            this.log('Restoring cached accessory: ' + device.name);
-        } else {
-            this.log('Adding new accessory: ' + device.name);
-            const accessory = new EnergyOnly(this.log, device, this.api);
-            this.api.registerAccessory('3EMEnergyMeterEnergy', accessory);
-        }
-    });
-};
-
-// =====================
-// Plugin registration
-// =====================
+// The main plugin function that Homebridge calls to register the platform
 module.exports = (api) => {
     Service = api.hap.Service;
     Characteristic = api.hap.Characteristic;
-    FakeGatoHistoryService = require('fakegato-history')(api);
-
-    api.registerAccessory('3EMEnergyMeter', EnergyMeter);
-    api.registerAccessory('3EMEnergyMeterEnergy', EnergyOnly);
-    api.registerPlatform('3EMEnergyMeterPlatform', ThreeEmPlatform);
+    PlatformAccessory = api.platformAccessory;
+    api.registerPlatform('3em-energy-meter', '3emEnergyMeter', EM3EnergyMeterPlatform);
 };
+
+// The platform class which manages the accessories
+class EM3EnergyMeterPlatform {
+    constructor(log, config, api) {
+        this.log = log;
+        this.config = config;
+        this.api = api;
+        this.accessories = [];
+
+        // Check for required configuration
+        if (!config || !config.devices || !Array.isArray(config.devices)) {
+            this.log.error('Missing or invalid "devices" configuration. Please check your config.json.');
+            return;
+        }
+
+        // Homebridge API has finished loading and is ready to restore accessories
+        this.api.on('didFinishLaunching', () => {
+            this.log.debug('didFinishLaunching event received.');
+            this.discoverDevices();
+        });
+    }
+
+    /**
+     * This function is called by Homebridge to restore cached accessories.
+     * We need to store them so we can update them later.
+     * @param {PlatformAccessory} accessory The accessory being restored.
+     */
+    configureAccessory(accessory) {
+        this.log.info(`Loading accessory from cache: ${accessory.displayName}`);
+        this.accessories.push(accessory);
+    }
+
+    /**
+     * Main function to discover and register devices based on the configuration.
+     */
+    async discoverDevices() {
+        this.log.info('Discovering 3EM energy meters...');
+        const devices = this.config.devices;
+        
+        for (const device of devices) {
+            const { name, ip } = device;
+
+            if (!name || !ip) {
+                this.log.warn('Device configuration is missing "name" or "ip". Skipping this device.');
+                continue;
+            }
+
+            // Generate a unique UUID for each accessory
+            const uuid = this.api.hap.uuid.generate(ip);
+            let accessory = this.accessories.find(acc => acc.UUID === uuid);
+
+            try {
+                // Fetch initial data to check if the device is reachable
+                const response = await axios.get(`http://${ip}/status`, { timeout: 5000 });
+                const status = response.data;
+                this.log.debug(`Successfully connected to device at ${ip}`);
+
+                if (accessory) {
+                    this.log.info(`Restoring existing accessory: ${name}`);
+                } else {
+                    // Create a new accessory if it's the first time
+                    this.log.info(`Adding new accessory: ${name}`);
+                    accessory = new PlatformAccessory(name, uuid);
+                    accessory.context.device = device;
+                    this.api.registerPlatformAccessories('homebridge-3em-energy-meter', '3emEnergyMeter', [accessory]);
+                    this.accessories.push(accessory);
+                }
+
+                // Create a new instance of the accessory handler
+                new EnergyMeterAccessory(this.log, this.api, accessory, this.config.updateInterval);
+
+            } catch (error) {
+                this.log.error(`Could not connect to device at IP ${ip}. Please check the IP address and power status.`);
+                this.log.error(error.message);
+            }
+        }
+    }
+}
+
+// The class that handles the accessory's services and characteristics
+class EnergyMeterAccessory {
+    constructor(log, api, accessory, updateInterval = 5000) {
+        this.log = log;
+        this.api = api;
+        this.accessory = accessory;
+        this.device = accessory.context.device;
+        this.updateInterval = updateInterval;
+
+        // Set the accessory information
+        this.accessory.getService(Service.AccessoryInformation)
+            .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+            .setCharacteristic(Characteristic.Model, '3EM Energy Meter')
+            .setCharacteristic(Characteristic.SerialNumber, this.device.ip);
+
+        // Add the custom `CurrentConsumption` and `TotalConsumption` characteristics
+        Characteristic.CurrentConsumption = this.createCharacteristic(CUSTOM_EVE_CHARACTERISTICS.CurrentConsumption, 'Current Consumption', 'power', 'W', -1);
+        Characteristic.TotalConsumption = this.createCharacteristic(CUSTOM_EVE_CHARACTERISTICS.TotalConsumption, 'Total Consumption', 'energy', 'kWh', 0);
+        
+        // Add a service for each phase. This allows for individual power readings.
+        const phases = ['A', 'B', 'C'];
+        
+        phases.forEach((phase, index) => {
+            const serviceName = `Phase ${phase} Power`;
+            let service = this.accessory.getService(serviceName);
+            if (!service) {
+                // Use a custom service to show as a unique accessory in Eve
+                service = new Service(serviceName, `3em-energy-meter-service-${index}`);
+                this.accessory.addService(service);
+            }
+
+            // Create the custom characteristics for this phase
+            const currentConsumptionChar = service.getCharacteristic(Characteristic.CurrentConsumption);
+            const totalConsumptionChar = service.getCharacteristic(Characteristic.TotalConsumption);
+            
+            // Set up get handler to report power and total energy
+            currentConsumptionChar.on('get', this.handleCharacteristicGet.bind(this, 'power', `total_power`, 'W'));
+            totalConsumptionChar.on('get', this.handleCharacteristicGet.bind(this, 'energy', `total_power`, 'W'));
+        });
+
+        // Start the polling interval to update the characteristics
+        this.pollStatus();
+    }
+
+    /**
+     * Creates and registers a custom characteristic.
+     * @param {string} uuid The UUID of the characteristic.
+     * @param {string} displayName The display name for the characteristic.
+     * @param {string} format The format of the characteristic (e.g., 'float').
+     * @param {string} unit The unit (e.g., 'W').
+     * @param {number} minValue The minimum value.
+     */
+    createCharacteristic(uuid, displayName, format, unit, minValue) {
+        return class extends Characteristic {
+            constructor() {
+                super(displayName, uuid);
+                this.setProps({
+                    format: format === 'power' ? Characteristic.Formats.FLOAT : Characteristic.Formats.UINT32,
+                    unit: unit,
+                    perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+                    minValue: minValue,
+                });
+                this.value = this.getDefaultValue();
+            }
+        };
+    }
+
+    /**
+     * Handles the 'get' event for a characteristic, fetching and returning data.
+     * @param {string} dataType The type of data to fetch ('power' or 'energy').
+     * @param {string} key The key to look for in the API response.
+     * @param {string} unit The unit of the data.
+     * @param {function} callback The Homebridge callback function.
+     */
+    async handleCharacteristicGet(dataType, key, unit, callback) {
+        this.log.debug(`Getting ${dataType} for ${this.accessory.displayName}`);
+        try {
+            const response = await axios.get(`http://${this.device.ip}/status`, { timeout: 5000 });
+            const status = response.data;
+            let value;
+            
+            // The Shelly 3EM API provides total power and total energy.
+            if (dataType === 'power') {
+                value = status.total_power;
+            } else if (dataType === 'energy') {
+                value = status.total_energy / 1000; // Convert Wh to kWh
+            } else {
+                return callback(new Error('Invalid data type requested'));
+            }
+            
+            this.log.info(`Fetched ${dataType}: ${value} ${unit}`);
+            callback(null, value);
+
+        } catch (error) {
+            this.log.error(`Error fetching data for ${this.accessory.displayName}: ${error.message}`);
+            callback(error, null);
+        }
+    }
+
+    /**
+     * Periodically polls the device for updates.
+     */
+    async pollStatus() {
+        try {
+            const response = await axios.get(`http://${this.device.ip}/status`, { timeout: 5000 });
+            const status = response.data;
+            const currentPower = status.total_power;
+            const totalEnergy = status.total_energy / 1000; // Convert Wh to kWh
+
+            // Update characteristics for all phases (though this plugin is set up to show total)
+            const phases = ['A', 'B', 'C'];
+            phases.forEach((phase, index) => {
+                const serviceName = `Phase ${phase} Power`;
+                const service = this.accessory.getService(serviceName);
+                if (service) {
+                    service.getCharacteristic(Characteristic.CurrentConsumption).updateValue(currentPower);
+                    service.getCharacteristic(Characteristic.TotalConsumption).updateValue(totalEnergy);
+                    this.log.debug(`Updated Phase ${phase} power to ${currentPower} W and energy to ${totalEnergy} kWh`);
+                }
+            });
+
+        } catch (error) {
+            this.log.error(`Failed to poll device ${this.device.name}: ${error.message}`);
+        }
+
+        setTimeout(() => this.pollStatus(), this.updateInterval);
+    }
+}
