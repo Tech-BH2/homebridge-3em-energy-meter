@@ -1,38 +1,56 @@
 {
 "pluginAlias": "3emEnergyMeter",
 "pluginType": "platform",
-"headerDisplay": "Configure your Shelly 3EM energy meters. Each meter will appear as a separate child bridge.",
+"headerDisplay": "This plugin integrates your Shelly 3EM energy meters into HomeKit. Each device will appear as a separate child bridge.",
+"footerDisplay": "For more information and advanced settings, please refer to the plugin documentation.",
 "platformSchema": {
 "type": "object",
 "properties": {
 "devices": {
-"title": "Devices",
+"title": "Configured Devices",
+"description": "Add each Shelly 3EM energy meter you want to connect to HomeKit. You can add as many as you need.",
 "type": "array",
 "items": {
-"title": "Energy Meter",
+"title": "Shelly 3EM Meter",
 "type": "object",
 "properties": {
 "name": {
-"title": "Name",
+"title": "Device Name",
 "type": "string",
 "required": true,
-"placeholder": "Living Room Meter"
+"placeholder": "Office Power Meter",
+"description": "A user-friendly name for this device in HomeKit."
 },
 "ip": {
 "title": "IP Address",
 "type": "string",
 "required": true,
-"placeholder": "192.168.1.100"
-}
-}
+"format": "ipv4",
+"placeholder": "192.168.1.100",
+"description": "The static IP address of the Shelly 3EM."
 },
-"default": []
+"showPerPhaseSensors": {
+"title": "Show Individual Phase Sensors",
+"type": "boolean",
+"default": false,
+"description": "Enable this to expose separate sensors for each of the three phases (A, B, C)."
+},
+"showTotalSensor": {
+"title": "Show Total Energy Sensor",
+"type": "boolean",
+"default": true,
+"description": "Enable this to expose a single sensor for the total energy consumption."
+}
+}
+}
 },
 "updateInterval": {
-"title": "Update Interval (ms)",
+"title": "Polling Interval (ms)",
 "type": "number",
-"description": "The frequency at which the plugin polls the device for new data, in milliseconds.",
-"default": 5000
+"minimum": 1000,
+"maximum": 60000,
+"default": 5000,
+"description": "The frequency in milliseconds at which the plugin will poll the Shelly 3EM for updated data. A lower value provides faster updates but may increase network traffic."
 }
 }
 }

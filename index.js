@@ -3,15 +3,11 @@
  * This plugin is designed to run as a child bridge and supports the Eve app's
  * power consumption characteristics.
  *
- * It has been refactored to use a modern Homebridge platform structure,
- * replaces the deprecated `request` library with `axios`, and includes
- * error handling and logging.
- *
- * This version also supports the Homebridge UI configuration schema.
+ * This version uses only Node.js built-in modules to avoid external dependencies.
  */
 
 // Import Homebridge API and services
-const axios = require('axios');
+const http = require('http');
 
 // Custom characteristics for Eve app power consumption and total energy
 const CUSTOM_EVE_CHARACTERISTICS = {
@@ -53,7 +49,6 @@ class EM3EnergyMeterPlatform {
 
     /**
      * This function is called by Homebridge to restore cached accessories.
-     * We need to store them so we can update them later.
      * @param {PlatformAccessory} accessory The accessory being restored.
      */
     configureAccessory(accessory) {
@@ -81,9 +76,8 @@ class EM3EnergyMeterPlatform {
             let accessory = this.accessories.find(acc => acc.UUID === uuid);
 
             try {
-                // Fetch initial data to check if the device is reachable
-                const response = await axios.get(`http://${ip}/status`, { timeout: 5000 });
-                const status = response.data;
+                // Check if the device is reachable using a basic HTTP request
+                const status = await this.getDeviceStatus(ip);
                 this.log.debug(`Successfully connected to device at ${ip}`);
 
                 if (accessory) {
@@ -106,6 +100,40 @@ class EM3EnergyMeterPlatform {
             }
         }
     }
+    
+    /**
+     * Helper function to get the device status using Node's built-in http module.
+     * @param {string} ip The IP address of the device.
+     * @returns {Promise<object>} The parsed JSON status.
+     */
+    getDeviceStatus(ip) {
+        return new Promise((resolve, reject) => {
+            const req = http.get(`http://${ip}/status`, { timeout: 5000 }, (res) => {
+                let data = '';
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+                res.on('end', () => {
+                    try {
+                        const parsedData = JSON.parse(data);
+                        resolve(parsedData);
+                    } catch (e) {
+                        reject(new Error(`Failed to parse JSON response from ${ip}`));
+                    }
+                });
+            });
+            
+            req.on('error', (err) => {
+                reject(new Error(`HTTP request failed for ${ip}: ${err.message}`));
+            });
+            
+            req.on('timeout', () => {
+                req.destroy(new Error('Request timed out'));
+            });
+            
+            req.end();
+        });
+    }
 }
 
 // The class that handles the accessory's services and characteristics
@@ -124,8 +152,20 @@ class EnergyMeterAccessory {
             .setCharacteristic(Characteristic.SerialNumber, this.device.ip);
 
         // Add the custom `CurrentConsumption` and `TotalConsumption` characteristics
-        Characteristic.CurrentConsumption = this.createCharacteristic(CUSTOM_EVE_CHARACTERISTICS.CurrentConsumption, 'Current Consumption', 'power', 'W', -1);
-        Characteristic.TotalConsumption = this.createCharacteristic(CUSTOM_EVE_CHARACTERISTICS.TotalConsumption, 'Total Consumption', 'energy', 'kWh', 0);
+        this.createCharacteristic(
+            this.api.hap.uuid.generate(CUSTOM_EVE_CHARACTERISTICS.CurrentConsumption),
+            'Current Consumption',
+            Characteristic.Formats.FLOAT,
+            'W',
+            -1
+        );
+        this.createCharacteristic(
+            this.api.hap.uuid.generate(CUSTOM_EVE_CHARACTERISTICS.TotalConsumption),
+            'Total Consumption',
+            Characteristic.Formats.UINT32,
+            'kWh',
+            0
+        );
         
         // Add a service for each phase. This allows for individual power readings.
         const phases = ['A', 'B', 'C'];
@@ -135,13 +175,13 @@ class EnergyMeterAccessory {
             let service = this.accessory.getService(serviceName);
             if (!service) {
                 // Use a custom service to show as a unique accessory in Eve
-                service = new Service(serviceName, `3em-energy-meter-service-${index}`);
+                service = new Service(serviceName, this.api.hap.uuid.generate(`3em-energy-meter-service-${index}`));
                 this.accessory.addService(service);
             }
 
             // Create the custom characteristics for this phase
-            const currentConsumptionChar = service.getCharacteristic(Characteristic.CurrentConsumption);
-            const totalConsumptionChar = service.getCharacteristic(Characteristic.TotalConsumption);
+            const currentConsumptionChar = service.getCharacteristic(this.api.hap.uuid.generate(CUSTOM_EVE_CHARACTERISTICS.CurrentConsumption));
+            const totalConsumptionChar = service.getCharacteristic(this.api.hap.uuid.generate(CUSTOM_EVE_CHARACTERISTICS.TotalConsumption));
             
             // Set up get handler to report power and total energy
             currentConsumptionChar.on('get', this.handleCharacteristicGet.bind(this, 'power', `total_power`, 'W'));
@@ -161,18 +201,19 @@ class EnergyMeterAccessory {
      * @param {number} minValue The minimum value.
      */
     createCharacteristic(uuid, displayName, format, unit, minValue) {
-        return class extends Characteristic {
+        class CustomCharacteristic extends this.api.hap.Characteristic {
             constructor() {
                 super(displayName, uuid);
                 this.setProps({
-                    format: format === 'power' ? Characteristic.Formats.FLOAT : Characteristic.Formats.UINT32,
+                    format: format,
                     unit: unit,
                     perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
                     minValue: minValue,
                 });
                 this.value = this.getDefaultValue();
             }
-        };
+        }
+        return CustomCharacteristic;
     }
 
     /**
@@ -185,8 +226,7 @@ class EnergyMeterAccessory {
     async handleCharacteristicGet(dataType, key, unit, callback) {
         this.log.debug(`Getting ${dataType} for ${this.accessory.displayName}`);
         try {
-            const response = await axios.get(`http://${this.device.ip}/status`, { timeout: 5000 });
-            const status = response.data;
+            const status = await this.getDeviceStatus(this.device.ip);
             let value;
             
             // The Shelly 3EM API provides total power and total energy.
@@ -206,25 +246,58 @@ class EnergyMeterAccessory {
             callback(error, null);
         }
     }
+    
+    /**
+     * Helper function to get the device status using Node's built-in http module.
+     * @param {string} ip The IP address of the device.
+     * @returns {Promise<object>} The parsed JSON status.
+     */
+    getDeviceStatus(ip) {
+        return new Promise((resolve, reject) => {
+            const req = http.get(`http://${ip}/status`, { timeout: 5000 }, (res) => {
+                let data = '';
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+                res.on('end', () => {
+                    try {
+                        const parsedData = JSON.parse(data);
+                        resolve(parsedData);
+                    } catch (e) {
+                        reject(new Error(`Failed to parse JSON response from ${ip}`));
+                    }
+                });
+            });
+            
+            req.on('error', (err) => {
+                reject(new Error(`HTTP request failed for ${ip}: ${err.message}`));
+            });
+            
+            req.on('timeout', () => {
+                req.destroy(new Error('Request timed out'));
+            });
+            
+            req.end();
+        });
+    }
 
     /**
      * Periodically polls the device for updates.
      */
     async pollStatus() {
         try {
-            const response = await axios.get(`http://${this.device.ip}/status`, { timeout: 5000 });
-            const status = response.data;
+            const status = await this.getDeviceStatus(this.device.ip);
             const currentPower = status.total_power;
             const totalEnergy = status.total_energy / 1000; // Convert Wh to kWh
 
-            // Update characteristics for all phases (though this plugin is set up to show total)
+            // Update characteristics for all phases
             const phases = ['A', 'B', 'C'];
             phases.forEach((phase, index) => {
                 const serviceName = `Phase ${phase} Power`;
                 const service = this.accessory.getService(serviceName);
                 if (service) {
-                    service.getCharacteristic(Characteristic.CurrentConsumption).updateValue(currentPower);
-                    service.getCharacteristic(Characteristic.TotalConsumption).updateValue(totalEnergy);
+                    service.getCharacteristic(this.api.hap.uuid.generate(CUSTOM_EVE_CHARACTERISTICS.CurrentConsumption)).updateValue(currentPower);
+                    service.getCharacteristic(this.api.hap.uuid.generate(CUSTOM_EVE_CHARACTERISTICS.TotalConsumption)).updateValue(totalEnergy);
                     this.log.debug(`Updated Phase ${phase} power to ${currentPower} W and energy to ${totalEnergy} kWh`);
                 }
             });
