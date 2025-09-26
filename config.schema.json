@@ -1,84 +1,44 @@
 {
-"pluginAlias": "3EMEnergyMeter",
-"pluginType": "accessory",
-"singular": true,
-"headerDisplay": "Shelly 3EM / EM Energy Meter Plugin",
-"footerDisplay": "Reports power data to the Eve app with historical logging.",
-"schema": {
-"type": "object",
-"properties": {
-"name": {
-"title": "Name",
-"type": "string",
-"required": true,
-"default": "Shelly 3EM"
-},
-"ip": {
-"title": "Device IP Address",
-"type": "string",
-"required": true,
-"format": "hostname"
-},
-"auth": {
-"title": "Authentication",
-"type": "object",
-"properties": {
-"user": {
-"title": "Username",
-"type": "string"
-},
-"pass": {
-"title": "Password",
-"type": "string"
-}
-}
-},
-"update_interval": {
-"title": "Update Interval (ms)",
-"type": "integer",
-"default": 10000,
-"minimum": 1000
-},
-"timeout": {
-"title": "Request Timeout (ms)",
-"type": "integer",
-"default": 5000,
-"minimum": 1000
-},
-"use_em": {
-"title": "Use Shelly EM (Single Phase)",
-"type": "boolean",
-"default": false
-},
-"use_em__mode": {
-"title": "Shelly EM Mode (0=Combine, 1=Channel 1, 2=Channel 2)",
-"type": "integer",
-"default": 0,
-"enum": [
-0,
-1,
-2
-]
-},
-"negative_handling_mode": {
-"title": "Negative Power Handling (0=Clamp to 0, 1=Absolute Value)",
-"type": "integer",
-"default": 0,
-"enum": [
-0,
-1
-]
-},
-"serial": {
-"title": "Serial Number",
-"type": "string",
-"default": "9000000"
-},
-"debug_log": {
-"title": "Enable Debug Logging",
-"type": "boolean",
-"default": false
-}
-}
-}
+  "pluginAlias": "3EMEnergyMeter",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Shelly 3EM / EM Energy Meter Plugin",
+  "footerDisplay": "This plugin supports Shelly EM (single-phase) and 3EM (three-phase). Values will be exposed in the Eve app.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Shelly Energy Meters"
+      },
+      "devices": {
+        "title": "Devices",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Device Name",
+              "type": "string"
+            },
+            "ip": {
+              "title": "Device IP Address",
+              "type": "string"
+            },
+            "use_em": {
+              "title": "Shelly EM (single-phase)",
+              "type": "boolean",
+              "default": false
+            },
+            "use_em_mode": {
+              "title": "EM Channel (0 or 1)",
+              "type": "integer",
+              "default": 0
+            }
+          }
+        }
+      }
+    }
+  }
 }
