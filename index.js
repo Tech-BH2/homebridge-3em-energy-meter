@@ -48,7 +48,7 @@ class EnergyMeterAccessory {
     this.use_em = config.use_em || false;
     this.use_em_mode = config.use_em_mode || 0;
 
-    this.service = new PowerMeterService(this.name);
+    this.service = PowerMeterService(this.name);
     this.informationService = new Service.AccessoryInformation()
       .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
       .setCharacteristic(Characteristic.Model, this.use_em ? 'Shelly EM' : 'Shelly 3EM')
@@ -121,14 +121,14 @@ class EnergyMeterAccessory {
   }
 }
 
-class PowerMeterService extends Service {
-  constructor(displayName, subtype) {
-    super(displayName, PowerMeterService.UUID, subtype);
-    this.addCharacteristic(EveCharacteristics.CurrentConsumption);
-    this.addOptionalCharacteristic(EveCharacteristics.TotalConsumption);
-    this.addOptionalCharacteristic(EveCharacteristics.Voltage);
-    this.addOptionalCharacteristic(EveCharacteristics.ElectricCurrent);
-  }
+// Factory function for PowerMeterService
+function PowerMeterService(displayName, subtype) {
+  const svc = new Service(displayName, PowerMeterService.UUID, subtype);
+  svc.addCharacteristic(EveCharacteristics.CurrentConsumption);
+  svc.addOptionalCharacteristic(EveCharacteristics.TotalConsumption);
+  svc.addOptionalCharacteristic(EveCharacteristics.Voltage);
+  svc.addOptionalCharacteristic(EveCharacteristics.ElectricCurrent);
+  return svc;
 }
 PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
 
