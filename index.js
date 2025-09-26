@@ -123,7 +123,11 @@ module.exports = (api) => {
 
       if (accessory) {
         this.log(`${platformName}: Restoring accessory from cache: ${accessory.displayName}`);
-        accessory.context.device = device;
+        accessory.context = {
+            name: device.name || 'Energy Meter',
+            host: device.host || '192.168.1.100',
+            use_em: device.use_em || false
+        };
         this._setupAccessory(accessory, device);
       } else {
         this.log(`${platformName}: Creating new accessory for ${device.name || device.ip}`);
