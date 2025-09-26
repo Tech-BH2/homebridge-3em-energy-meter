@@ -43,9 +43,54 @@ util.inherits(EveVoltage, Characteristic);
 EveVoltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
 
 module.exports = (api) => {
-  // initialize fakegato with Homebridge 2.0 API
+  const util = require('util');
+
+  // HAP classes
+  Service = api.hap.Service;
+  Characteristic = api.hap.Characteristic;
+  UUIDGen = api.hap.uuid;
+
+  // ===== Define Eve custom characteristics (safe for HB 2.0) =====
+  function EveCurrentConsumption() {
+    Characteristic.call(this, 'Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+    this.setProps({
+      format: Characteristic.Formats.FLOAT,
+      unit: 'W',
+      perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+    });
+    this.value = this.getDefaultValue();
+  }
+  util.inherits(EveCurrentConsumption, Characteristic);
+  EveCurrentConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
+
+  function EveTotalConsumption() {
+    Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+    this.setProps({
+      format: Characteristic.Formats.FLOAT,
+      unit: 'kWh',
+      perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+    });
+    this.value = this.getDefaultValue();
+  }
+  util.inherits(EveTotalConsumption, Characteristic);
+  EveTotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
+
+  function EveVoltage() {
+    Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+    this.setProps({
+      format: Characteristic.Formats.FLOAT,
+      unit: 'V',
+      perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+    });
+    this.value = this.getDefaultValue();
+  }
+  util.inherits(EveVoltage, Characteristic);
+  EveVoltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
+
+  // ===== Initialize FakeGato for HB 2.0 =====
   FakeGatoHistoryService = require('fakegato-history')(api);
 
+  // ===== Register the platform =====
   api.registerPlatform('homebridge-3em-energy-meter', '3EMEnergyMeter', EnergyMeterPlatform, true);
 };
 
