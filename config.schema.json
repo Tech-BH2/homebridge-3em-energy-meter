@@ -1,41 +1,54 @@
 {
-  "pluginAlias": "3EMEnergyMeter",
-  "pluginType": "platform",
-  "singular": true,
-  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
-  "footerDisplay": "This accessory will only be supported in the third-party HomeKit app EVE.",
-  "schema": {
-    "type": "object",
-    "required": ["name", "devices"],
-    "properties": {
-      "name": {
-        "title": "Platform Name",
-        "type": "string",
-        "default": "3EMEnergyMeter",
-        "description": "The name of the platform displayed in Homebridge."
-      },
-      "devices": {
-        "title": "Devices",
-        "type": "array",
-        "description": "List of Shelly EM devices to monitor",
-        "items": {
-          "type": "object",
-          "required": ["id", "name", "host"],
-          "properties": {
-            "id": {
-              "title": "Device ID",
-              "type": "string",
-              "description": "Unique ID for this device."
-            },
-            "name": {
-              "title": "Device Name",
-              "type": "string",
-              "description": "Name displayed in HomeKit."
-            },
-            "host": {
-              "title": "Host",
-              "type": "string",
-              "description": "IP address of the Shelly EM device."
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "3EM Energy Meter",
+  "type": "object",
+  "required": ["name", "platforms"],
+  "properties": {
+    "name": {
+      "title": "Homebridge Name",
+      "type": "string",
+      "default": "Homebridge"
+    },
+    "platforms": {
+      "title": "Platforms",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["platform", "name", "devices"],
+        "properties": {
+          "platform": {
+            "title": "Platform",
+            "type": "string",
+            "enum": ["3EMEnergyMeter"]
+          },
+          "name": {
+            "title": "Platform Name",
+            "type": "string",
+            "default": "3EMEnergyMeter"
+          },
+          "devices": {
+            "title": "Devices",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "host"],
+              "properties": {
+                "id": {
+                  "title": "Device ID",
+                  "type": "string",
+                  "description": "Unique identifier for this energy meter"
+                },
+                "name": {
+                  "title": "Device Name",
+                  "type": "string",
+                  "description": "Name of the energy meter accessory"
+                },
+                "host": {
+                  "title": "Host",
+                  "type": "string",
+                  "description": "IP address of the Shelly EM device"
+                }
+              }
             }
           }
         }
