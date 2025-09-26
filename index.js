@@ -1,10 +1,12 @@
 'use strict';
 
 let Service, Characteristic, UUIDGen;
-
-const FakeGatoHistoryService = require('fakegato-history');
+let FakeGatoHistoryService;
 
 module.exports = (api) => {
+  // initialize fakegato with the current API
+  FakeGatoHistoryService = require('fakegato-history')(api);
+
   api.registerPlatform('homebridge-3em-energy-meter', '3EMEnergyMeter', EnergyMeterPlatform, true);
 };
 
