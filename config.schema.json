@@ -1,52 +1,41 @@
 {
   "pluginAlias": "3EMEnergyMeter",
   "pluginType": "platform",
-  "headerDisplay": "Shelly 3EM Energy Meter Platform",
-  "singular": false,
+  "singular": true,
+  "headerDisplay": "3EM Energy Meter Platform",
+  "footerDisplay": "Requires Shelly EM device(s) on your local network.",
   "schema": {
     "type": "object",
     "required": ["name", "devices"],
     "properties": {
       "name": {
-        "type": "string",
         "title": "Platform Name",
-        "default": "3EMEnergyMeter"
+        "type": "string",
+        "default": "3EMEnergyMeter",
+        "description": "The name of the platform as it will appear in Homebridge UI."
       },
       "devices": {
-        "type": "array",
         "title": "Devices",
+        "type": "array",
+        "description": "List of Shelly EM devices to monitor",
         "items": {
           "type": "object",
           "required": ["id", "name", "host"],
           "properties": {
             "id": {
-              "type": "string",
               "title": "Device ID",
-              "description": "Unique identifier for this Shelly EM device"
+              "type": "string",
+              "description": "Unique ID for the device."
             },
             "name": {
-              "type": "string",
               "title": "Device Name",
-              "description": "The name that will appear in HomeKit/Eve"
+              "type": "string",
+              "description": "The name of the device as it appears in HomeKit."
             },
             "host": {
-              "type": "string",
               "title": "Device IP",
-              "description": "The IP address of the Shelly EM"
-            },
-            "auth": {
-              "type": "object",
-              "title": "Optional HTTP Auth",
-              "properties": {
-                "user": {
-                  "type": "string",
-                  "title": "Username"
-                },
-                "pass": {
-                  "type": "string",
-                  "title": "Password"
-                }
-              }
+              "type": "string",
+              "description": "The local IP address of the Shelly EM device."
             }
           }
         }
