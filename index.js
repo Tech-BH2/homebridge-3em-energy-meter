@@ -1,96 +1,21 @@
 'use strict';
 
 const util = require('util');
+const axios = require('axios');
 
 let Service, Characteristic, UUIDGen;
 let FakeGatoHistoryService;
 
-// Eve custom characteristics (UUIDs documented by Elgato Eve reverse-engineering)
-function EveCurrentConsumption() {
-  Characteristic.call(this, 'Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-  this.setProps({
-    format: Characteristic.Formats.FLOAT,
-    unit: 'W',
-    perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
-  });
-  this.value = this.getDefaultValue();
-}
-util.inherits(EveCurrentConsumption, Characteristic);
-EveCurrentConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
-
-function EveTotalConsumption() {
-  Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-  this.setProps({
-    format: Characteristic.Formats.FLOAT,
-    unit: 'kWh',
-    perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
-  });
-  this.value = this.getDefaultValue();
-}
-util.inherits(EveTotalConsumption, Characteristic);
-EveTotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
-
-function EveVoltage() {
-  Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-  this.setProps({
-    format: Characteristic.Formats.FLOAT,
-    unit: 'V',
-    perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
-  });
-  this.value = this.getDefaultValue();
-}
-util.inherits(EveVoltage, Characteristic);
-EveVoltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
-
 module.exports = (api) => {
-  const util = require('util');
-
   // HAP classes
   Service = api.hap.Service;
   Characteristic = api.hap.Characteristic;
   UUIDGen = api.hap.uuid;
 
-  // ===== Define Eve custom characteristics (safe for HB 2.0) =====
-  function EveCurrentConsumption() {
-    Characteristic.call(this, 'Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-    this.setProps({
-      format: Characteristic.Formats.FLOAT,
-      unit: 'W',
-      perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-    });
-    this.value = this.getDefaultValue();
-  }
-  util.inherits(EveCurrentConsumption, Characteristic);
-  EveCurrentConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
-
-  function EveTotalConsumption() {
-    Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-    this.setProps({
-      format: Characteristic.Formats.FLOAT,
-      unit: 'kWh',
-      perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-    });
-    this.value = this.getDefaultValue();
-  }
-  util.inherits(EveTotalConsumption, Characteristic);
-  EveTotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
-
-  function EveVoltage() {
-    Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-    this.setProps({
-      format: Characteristic.Formats.FLOAT,
-      unit: 'V',
-      perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-    });
-    this.value = this.getDefaultValue();
-  }
-  util.inherits(EveVoltage, Characteristic);
-  EveVoltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
-
-  // ===== Initialize FakeGato for HB 2.0 =====
+  // Initialize FakeGato
   FakeGatoHistoryService = require('fakegato-history')(api);
 
-  // ===== Register the platform =====
+  // Register the platform
   api.registerPlatform('homebridge-3em-energy-meter', '3EMEnergyMeter', EnergyMeterPlatform, true);
 };
 
@@ -100,14 +25,10 @@ class EnergyMeterPlatform {
     this.config = config || {};
     this.api = api;
 
-    Service = this.api.hap.Service;
-    Characteristic = this.api.hap.Characteristic;
-    UUIDGen = this.api.hap.uuid;
-
     this.accessories = new Map();
 
     if (api) {
-      this.api.on('didFinishLaunching', () => {
+      api.on('didFinishLaunching', () => {
         this.log('3EMEnergyMeter: didFinishLaunching — creating/restoring devices');
         this.discoverDevices();
       });
@@ -131,14 +52,13 @@ class EnergyMeterPlatform {
 
       if (!accessory) {
         this.log(`Creating new accessory for ${deviceConfig.name}`);
-
         accessory = new this.api.platformAccessory(deviceConfig.name, uuid);
 
-        // ✅ Only JSON-safe fields in context
+        // Only JSON-safe fields in context
         accessory.context = {
           name: deviceConfig.name,
           host: deviceConfig.host,
-          use_em: !!deviceConfig.use_em,
+          use_em: !!deviceConfig.use_em
         };
 
         new EnergyMeterAccessory(this, accessory, deviceConfig);
@@ -146,7 +66,7 @@ class EnergyMeterPlatform {
         this.api.registerPlatformAccessories(
           'homebridge-3em-energy-meter',
           '3EMEnergyMeter',
-          [accessory],
+          [accessory]
         );
 
         this.accessories.set(uuid, accessory);
@@ -164,47 +84,101 @@ class EnergyMeterAccessory {
     this.accessory = accessory;
     this.config = config;
 
-    const { Service } = this.platform.api.hap;
+    const { Service, Characteristic } = platform.api.hap;
 
-    this.service = this.accessory.getService(Service.Outlet) ||
-                   this.accessory.addService(Service.Outlet, accessory.context.name);
+    // Define Eve custom characteristics
+    function EveCurrentConsumption() {
+      Characteristic.call(this, 'Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'W',
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    }
+    util.inherits(EveCurrentConsumption, Characteristic);
+    EveCurrentConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
 
+    function EveTotalConsumption() {
+      Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'kWh',
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    }
+    util.inherits(EveTotalConsumption, Characteristic);
+    EveTotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
+
+    function EveVoltage() {
+      Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'V',
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    }
+    util.inherits(EveVoltage, Characteristic);
+    EveVoltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
+
+    // Set up main service
+    this.service = accessory.getService(Service.Outlet) || accessory.addService(Service.Outlet, accessory.context.name);
     this.service.setCharacteristic(Characteristic.On, true);
 
-    // Fakegato history service (used by Eve app)
-    this.loggingService = new FakeGatoHistoryService('energy', this.accessory, {
-      storage: 'fs',
-    });
+    // Add Eve characteristics
+    this.powerConsumption = this.service.getCharacteristic(EveCurrentConsumption) || this.service.addCharacteristic(EveCurrentConsumption);
+    this.totalConsumption = this.service.getCharacteristic(EveTotalConsumption) || this.service.addCharacteristic(EveTotalConsumption);
+    this.voltage = this.service.getCharacteristic(EveVoltage) || this.service.addCharacteristic(EveVoltage);
 
-    // Eve characteristics
-    this.powerConsumption = this.service.getCharacteristic(EveCurrentConsumption) ||
-                            this.service.addCharacteristic(EveCurrentConsumption);
+    // FakeGato history
+    this.loggingService = new FakeGatoHistoryService('energy', accessory, { storage: 'fs' });
 
-    this.totalConsumption = this.service.getCharacteristic(EveTotalConsumption) ||
-                            this.service.addCharacteristic(EveTotalConsumption);
-
-    this.voltage = this.service.getCharacteristic(EveVoltage) ||
-                   this.service.addCharacteristic(EveVoltage);
-
-    // Timer for polling device
+    // Polling timer
     this.updateTimer = setInterval(() => this.updateData(), 60000);
 
-    this.platform.log(`${accessory.displayName} initialized`);
+    platform.log(`${accessory.displayName} initialized`);
+  }
+
+  async fetchEmeterData() {
+    try {
+      const response = await axios.get(`http://${this.config.host}/status`, {
+        auth: this.config.auth,
+        timeout: 5000,
+      });
+      return response.data.emeters;
+    } catch (error) {
+      this.platform.log.error('Error fetching emeter data:', error);
+      return null;
+    }
   }
 
   async getCurrentPower() {
-    // TODO: Replace with actual Shelly EM HTTP call
-    return 42; // watts (test value)
+    const emeters = await this.fetchEmeterData();
+    if (emeters) {
+      const totalPower = emeters.reduce((sum, emeter) => sum + emeter.power, 0);
+      return totalPower;
+    }
+    return 0;
   }
 
   async getTotalConsumption() {
-    // TODO: Replace with Shelly EM total kWh
-    return 1.23; // kWh (test value)
+    const emeters = await this.fetchEmeterData();
+    if (emeters) {
+      const totalConsumption = emeters.reduce((sum, emeter) => sum + emeter.total, 0);
+      return totalConsumption;
+    }
+    return 0;
   }
 
   async getVoltage() {
-    // TODO: Replace with Shelly EM voltage reading
-    return 230.0; // volts (test value)
+    const emeters = await this.fetchEmeterData();
+    if (emeters) {
+      const totalVoltage = emeters.reduce((sum, emeter) => sum + emeter.voltage, 0);
+      return totalVoltage / emeters.length;
+    }
+    return 0;
   }
 
   updateData() {
