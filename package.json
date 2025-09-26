@@ -27,8 +27,8 @@
     "url": "git://github.com/Tech-BH2/homebridge-3em-energy-meter.git"
   },
   "dependencies": {
-    "request": "^2.88.2",
-    "fakegato-history": "^0.4.9" 
+    "request": "^2.5.0",
+    "fakegato-history": "^0.6.1" 
   },
   "funding": {
   "type" : "paypal",
