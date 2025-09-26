@@ -1,57 +1,71 @@
 {
-"pluginAlias": "3EMEnergyMeter",
-"pluginType": "platform",
-"headerDisplay": "This plugin integrates your Shelly 3EM energy meters into HomeKit. Each device will appear as a separate child bridge.",
-"footerDisplay": "For more information and advanced settings, please refer to the plugin documentation.",
-"platformSchema": {
-"type": "object",
-"properties": {
-"devices": {
-"title": "Configured Devices",
-"description": "Add each Shelly 3EM energy meter you want to connect to HomeKit. You can add as many as you need.",
-"type": "array",
-"items": {
-"title": "Shelly 3EM Meter",
-"type": "object",
-"properties": {
-"name": {
-"title": "Device Name",
-"type": "string",
-"required": true,
-"placeholder": "Office Power Meter",
-"description": "A user-friendly name for this device in HomeKit."
-},
-"ip": {
-"title": "IP Address",
-"type": "string",
-"required": true,
-"format": "ipv4",
-"placeholder": "192.168.1.100",
-"description": "The static IP address of the Shelly 3EM."
-},
-"showPerPhaseSensors": {
-"title": "Show Individual Phase Sensors",
-"type": "boolean",
-"default": false,
-"description": "Enable this to expose separate sensors for each of the three phases (A, B, C)."
-},
-"showTotalSensor": {
-"title": "Show Total Energy Sensor",
-"type": "boolean",
-"default": true,
-"description": "Enable this to expose a single sensor for the total energy consumption."
-}
-}
-}
-},
-"updateInterval": {
-"title": "Polling Interval (ms)",
-"type": "number",
-"minimum": 1000,
-"maximum": 60000,
-"default": 5000,
-"description": "The frequency in milliseconds at which the plugin will poll the Shelly 3EM for updated data. A lower value provides faster updates but may increase network traffic."
-}
-}
-}
+  "pluginAlias": "3EMEnergyMeter",
+  "pluginType": "accessory",
+  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
+  "footerDisplay": "This accessory will only be supported in the third-party Homekit app EVE.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "ip": {
+        "title": "Shelly IP address",
+        "type": "string"
+      },
+      "auth": {
+        "title": "Auth (optional)",
+        "type": "object",
+        "properties": {
+          "user": { "title": "Username", "type": "string" },
+          "pass": { "title": "Password", "type": "string" }
+        }
+      },
+      "timeout": {
+        "title": "HTTP timeout (ms)",
+        "type": "integer",
+        "default": 5000
+      },
+      "update_interval": {
+        "title": "Update interval (ms)",
+        "type": "integer",
+        "default": 10000
+      },
+      "use_em": {
+        "title": "Use Shelly EM device (single/double channel EM)",
+        "type": "boolean",
+        "default": false
+      },
+      "use_em_mode": {
+        "title": "EM mode (0 = combine ch1+ch2 / 1 = channel1 / 2 = channel2)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 2
+      },
+      "negative_handling_mode": {
+        "title": "Negative handling (0 = zero negatives, 1 = absolute values)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 1
+      },
+      "use_pf": {
+        "title": "Use Power Factor when calculating current (pf)",
+        "type": "boolean",
+        "default": false
+      },
+      "debug_log": {
+        "title": "Enable debug logging",
+        "type": "boolean",
+        "default": false
+      },
+      "serial": {
+        "title": "Accessory serial number (unique required for fakegato-history)",
+        "type": "string"
+      }
+    },
+    "required": ["name","ip"]
+  }
 }
