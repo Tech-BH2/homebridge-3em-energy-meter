@@ -2,40 +2,46 @@
   "pluginAlias": "3EMEnergyMeter",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "3EM Energy Meter Platform",
-  "footerDisplay": "Requires Shelly EM device(s) on your local network.",
+  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
+  "footerDisplay": "This accessory will only be supported in the third-party Homekit app EVE.",
   "schema": {
     "type": "object",
     "required": ["name", "devices"],
+    "additionalProperties": false,
     "properties": {
       "name": {
         "title": "Platform Name",
+        "description": "This name will appear in Homebridge UI and HomeKit",
         "type": "string",
-        "default": "3EMEnergyMeter",
-        "description": "The name of the platform as it will appear in Homebridge UI."
+        "default": "3EMEnergyMeter"
       },
       "devices": {
         "title": "Devices",
-        "type": "array",
         "description": "List of Shelly EM devices to monitor",
+        "type": "array",
         "items": {
           "type": "object",
           "required": ["id", "name", "host"],
+          "additionalProperties": false,
           "properties": {
             "id": {
               "title": "Device ID",
+              "description": "Unique ID for this Shelly EM device",
               "type": "string",
-              "description": "Unique ID for the device."
+              "default": "shellyem1"
             },
             "name": {
               "title": "Device Name",
+              "description": "Name of the accessory in HomeKit",
               "type": "string",
-              "description": "The name of the device as it appears in HomeKit."
+              "default": "Energy Meter"
             },
             "host": {
-              "title": "Device IP",
+              "title": "Host IP Address",
+              "description": "IP address of your Shelly EM device",
               "type": "string",
-              "description": "The local IP address of the Shelly EM device."
+              "default": "192.168.2.95",
+              "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$"
             }
           }
         }
