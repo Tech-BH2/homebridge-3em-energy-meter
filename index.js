@@ -1,3 +1,4 @@
+
 var inherits = require('util').inherits;
 var Service, Characteristic;
 var axios = require('axios');
@@ -100,24 +101,26 @@ function EnergyMeter (log, config) {
 	EveAmpere1.UUID = 'E863F126-079E-48FF-8F27-9C2605A29F52';
 	inherits(EveAmpere1, Characteristic);
 
-	var PowerMeterService = function (displayName, subtype) {
-		Service.call(this, displayName, '00000001-0000-1777-8000-775D67EC4377', subtype);
-		this.addCharacteristic(EvePowerConsumption);
-		this.addOptionalCharacteristic(EveTotalConsumption);
-		this.addOptionalCharacteristic(EveVoltage1);
-    this.addOptionalCharacteristic(EveAmpere1);
-	};
+	// Fixed PowerMeterService constructor for Homebridge 2.0 compatibility
+	class PowerMeterService extends Service {
+		constructor(displayName, subtype) {
+			super(displayName, '00000001-0000-1777-8000-775D67EC4377', subtype);
+			this.addCharacteristic(EvePowerConsumption);
+			this.addOptionalCharacteristic(EveTotalConsumption);
+			this.addOptionalCharacteristic(EveVoltage1);
+			this.addOptionalCharacteristic(EveAmpere1);
+		}
+	}
 	PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
-	inherits(PowerMeterService, Service);
 
 	// local vars
 	this._EvePowerConsumption = EvePowerConsumption;
 	this._EveTotalConsumption = EveTotalConsumption;
 	this._EveVoltage1 = EveVoltage1;
-  this._EveAmpere1 = EveAmpere1;
+	this._EveAmpere1 = EveAmpere1;
 
-  // info
-  this.informationService = new Service.AccessoryInformation();
+	// info
+	this.informationService = new Service.AccessoryInformation();
 	this.informationService
 			.setCharacteristic(Characteristic.Manufacturer, "Shelly - produdegr")
 			.setCharacteristic(Characteristic.Model, "Shelly 3EM")
@@ -128,11 +131,11 @@ function EnergyMeter (log, config) {
 	this.service = new PowerMeterService(this.name);
 	this.service.getCharacteristic(this._EvePowerConsumption).on('get', this.getPowerConsumption.bind(this));
 	this.service.addCharacteristic(this._EveTotalConsumption).on('get', this.getTotalConsumption.bind(this));
-  this.service.addCharacteristic(this._EveVoltage1).on('get', this.getVoltage1.bind(this));
-  this.service.addCharacteristic(this._EveAmpere1).on('get', this.getAmpere1.bind(this));
+	this.service.addCharacteristic(this._EveVoltage1).on('get', this.getVoltage1.bind(this));
+	this.service.addCharacteristic(this._EveAmpere1).on('get', this.getAmpere1.bind(this));
 
-  // add fakegato
-  this.historyService = new FakeGatoHistoryService("energy", this, {storage:'fs'});
+	// add fakegato
+	this.historyService = new FakeGatoHistoryService("energy", this, {storage:'fs'});
 }
 
 EnergyMeter.prototype.updateState = function () {
