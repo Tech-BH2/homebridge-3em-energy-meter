@@ -1,4 +1,3 @@
-
 var inherits = require('util').inherits;
 var Service, Characteristic;
 var axios = require('axios');
