@@ -2,13 +2,18 @@
   "pluginAlias": "3EMEnergyMeter",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
-  "footerDisplay": "This accessory is only fully supported in the third-party HomeKit app Eve.",
+  "headerDisplay": "Shelly 3EM Energy Meter Platform",
+  "footerDisplay": "This accessory supports HomeKit/EVE energy monitoring with Shelly 3EM.",
   "schema": {
     "type": "object",
     "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "3EM Energy Meter"
+      },
       "devices": {
-        "title": "Devices",
+        "title": "Shelly Devices",
         "type": "array",
         "items": {
           "type": "object",
@@ -16,24 +21,38 @@
             "name": {
               "title": "Device Name",
               "type": "string",
-              "required": true,
-              "description": "A friendly name for this Shelly 3EM device"
+              "default": "Main Meter"
             },
             "host": {
-              "title": "Device Host / IP",
+              "title": "IP Address / Hostname",
               "type": "string",
-              "required": true,
-              "description": "The hostname or IP address of the Shelly 3EM (e.g. 192.168.1.50)"
+              "description": "The IP address of your Shelly 3EM device."
+            },
+            "auth": {
+              "title": "Authentication (Optional)",
+              "type": "object",
+              "properties": {
+                "user": {
+                  "title": "Username",
+                  "type": "string"
+                },
+                "pass": {
+                  "title": "Password",
+                  "type": "string"
+                }
+              }
             },
             "use_em": {
               "title": "Use EM Mode",
               "type": "boolean",
-              "default": false,
-              "description": "Enable if this device should be treated as an EM (single-phase) instead of a 3EM"
+              "default": true,
+              "description": "Must be enabled for single-phase Shelly EM."
             }
-          }
+          },
+          "required": ["name", "host"]
         }
-      }
-    }
+      ]
+    },
+    "required": ["name", "devices"]
   }
 }
