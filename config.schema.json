@@ -1,57 +1,56 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "3EM Energy Meter Platform",
-  "type": "object",
-  "properties": {
-    "platform": {
-      "type": "string",
-      "default": "3EMEnergyMeter",
-      "title": "Platform",
-      "description": "The platform name for Homebridge"
-    },
-    "name": {
-      "type": "string",
-      "default": "3EMEnergyMeter Platform",
-      "title": "Platform Name",
-      "description": "Display name of the platform in Homebridge"
-    },
-    "devices": {
-      "type": "array",
-      "title": "Devices",
-      "description": "List of Shelly EM devices to monitor",
-      "items": {
-        "type": "object",
-        "required": ["name", "host", "use_em"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Device Name",
-            "description": "Friendly name for this device"
-          },
-          "host": {
-            "type": "string",
-            "title": "Shelly Device Host",
-            "description": "IP address or hostname of your Shelly EM"
-          },
-          "use_em": {
-            "type": "boolean",
-            "default": true,
-            "title": "Use EMeters Array",
-            "description": "Enable this for single-phase Shelly EM devices"
-          },
-          "auth": {
-            "type": "object",
-            "title": "Optional HTTP Auth",
-            "description": "Provide if your Shelly requires username/password",
-            "properties": {
-              "user": { "type": "string", "title": "Username", "default": "" },
-              "pass": { "type": "string", "title": "Password", "default": "" }
+  "pluginAlias": "3EMEnergyMeter",
+  "pluginType": "platform",
+  "headerDisplay": "Shelly 3EM Energy Meter Platform",
+  "singular": false,
+  "schema": {
+    "type": "object",
+    "required": ["name", "devices"],
+    "properties": {
+      "name": {
+        "type": "string",
+        "title": "Platform Name",
+        "default": "3EMEnergyMeter"
+      },
+      "devices": {
+        "type": "array",
+        "title": "Devices",
+        "items": {
+          "type": "object",
+          "required": ["id", "name", "host"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "title": "Device ID",
+              "description": "Unique identifier for this Shelly EM device"
             },
-            "required": []
+            "name": {
+              "type": "string",
+              "title": "Device Name",
+              "description": "The name that will appear in HomeKit/Eve"
+            },
+            "host": {
+              "type": "string",
+              "title": "Device IP",
+              "description": "The IP address of the Shelly EM"
+            },
+            "auth": {
+              "type": "object",
+              "title": "Optional HTTP Auth",
+              "properties": {
+                "user": {
+                  "type": "string",
+                  "title": "Username"
+                },
+                "pass": {
+                  "type": "string",
+                  "title": "Password"
+                }
+              }
+            }
           }
         }
       }
     }
-  },
-  "required": ["platform", "name", "devices"]
+  }
 }

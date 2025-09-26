@@ -2,7 +2,6 @@
 
 const http = require('http');
 const util = require('util');
-
 let Service, Characteristic, UUIDGen, FakeGatoHistoryService;
 
 module.exports = (api) => {
@@ -17,7 +16,7 @@ module.exports = (api) => {
       this.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'W',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
       });
       this.value = this.getDefaultValue();
     }
@@ -29,7 +28,7 @@ module.exports = (api) => {
       this.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'kWh',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
       });
       this.value = this.getDefaultValue();
     }
@@ -41,160 +40,173 @@ module.exports = (api) => {
       this.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'V',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
       });
       this.value = this.getDefaultValue();
     }
   }
 
-  // Initialize FakeGato
   FakeGatoHistoryService = require('fakegato-history')(api);
-
-  // EnergyMeterAccessory
-  class EnergyMeterAccessory {
-    constructor(log, device) {
-      this.log = log;
-      this.name = device.name;
-      this.host = device.host;
-      this.use_em = device.use_em || false;
-      this.auth = device.auth || {};
-      this.services = [];
-
-      // Main Outlet service for HomeKit
-      this.service = new Service.Outlet(this.name);
-
-      // Add custom Eve characteristics
-      this.currentConsumption = this.service.addCharacteristic(new EveCurrentConsumption());
-      this.totalConsumption = this.service.addCharacteristic(new EveTotalConsumption());
-      this.voltage = this.service.addCharacteristic(new EveVoltage());
-
-      // FakeGato history
-      this.fakeGatoService = new FakeGatoHistoryService('energy', this.service, { storage: 'fs' });
-
-      // Start polling
-      this.poll();
-    }
-
-    poll() {
-      this.updateValues();
-      setInterval(() => this.updateValues(), 10000); // every 10s
-    }
-
-    updateValues() {
-      this.getCurrentPower((err, currentPower) => {
-        if (!err) this.currentConsumption.updateValue(currentPower);
-      });
-
-      this.getTotalEnergy((err, totalEnergy) => {
-        if (!err) this.totalConsumption.updateValue(totalEnergy);
-      });
-
-      this.getVoltage((err, voltage) => {
-        if (!err) this.voltage.updateValue(voltage);
-      });
-
-      // Log to FakeGato
-      if (this.fakeGatoService && typeof this.fakeGatoService.addEntry === 'function') {
-        this.fakeGatoService.addEntry({
-          time: Math.floor(new Date().getTime() / 1000),
-          watts: this.currentConsumption.value,
-          kilowatts: this.totalConsumption.value,
-        });
-      }
-    }
-
-    // Shelly EM HTTP Polling Methods
-    getCurrentPower(callback) {
-      const path = this.use_em ? '/status/emeters/0' : '/status';
-      this.httpGet(path, (err, data) => {
-        if (err) return callback(err);
-        const power = data.power || (data.emeters && data.emeters[0] && data.emeters[0].power) || 0;
-        callback(null, power);
-      });
-    }
-
-    getTotalEnergy(callback) {
-      const path = this.use_em ? '/status/emeters/0' : '/status';
-      this.httpGet(path, (err, data) => {
-        if (err) return callback(err);
-        const total = data.total || (data.emeters && data.emeters[0] && data.emeters[0].total) || 0;
-        callback(null, total);
-      });
-    }
-
-    getVoltage(callback) {
-      const path = '/status';
-      this.httpGet(path, (err, data) => {
-        if (err) return callback(err);
-        const voltage = data.voltage || 0;
-        callback(null, voltage);
-      });
-    }
-
-    httpGet(path, callback) {
-      const options = {
-        host: this.host,
-        port: 80,
-        path,
-        auth: this.auth.user && this.auth.pass ? `${this.auth.user}:${this.auth.pass}` : undefined,
-        method: 'GET',
-      };
-
-      const req = http.request(options, (res) => {
-        let body = '';
-        res.on('data', (chunk) => (body += chunk));
-        res.on('end', () => {
-          try {
-            const data = JSON.parse(body);
-            callback(null, data);
-          } catch (e) {
-            callback(e);
-          }
-        });
-      });
-
-      req.on('error', (err) => callback(err));
-      req.end();
-    }
-
-    getServices() {
-      return [this.service, this.fakeGatoService];
-    }
-  }
-
-  // EnergyMeterPlatform
-  class EnergyMeterPlatform {
-    constructor(log, config, api) {
-      this.log = log;
-      this.config = config;
-      this.api = api;
-      this.accessories = [];
-
-      if (!this.config || !this.config.devices) {
-        log.error('No devices configured for 3EMEnergyMeter platform');
-        return;
-      }
-
-      this.api.on('didFinishLaunching', () => this.discoverDevices());
-    }
-
-    discoverDevices() {
-      this.config.devices.forEach((deviceConfig) => {
-        try {
-          const accessory = new EnergyMeterAccessory(this.log, deviceConfig);
-          this.accessories.push(accessory);
-          this.log.info(`3EMEnergyMeter: Registered accessory: ${accessory.name}`);
-        } catch (e) {
-          this.log.error(`Failed to create accessory for ${deviceConfig.name}: ${e.message}`);
-        }
-      });
-    }
-
-    accessories() {
-      return this.accessories;
-    }
-  }
 
   // Register platform
   api.registerPlatform('homebridge-3em-energy-meter', '3EMEnergyMeter', EnergyMeterPlatform, true);
 };
+
+class EnergyMeterPlatform {
+  constructor(log, config, api) {
+    this.log = log;
+    this.config = config || {};
+    this.api = api;
+    this.accessories = [];
+
+    if (api) {
+      api.on('didFinishLaunching', () => {
+        this.discoverDevices();
+      });
+    }
+  }
+
+  configureAccessory(accessory) {
+    // Called once for each cached accessory restored
+    this.accessories.push(accessory);
+    this.log(`Restored accessory from cache: ${accessory.displayName}`);
+  }
+
+  discoverDevices() {
+    const devices = this.config.devices || [];
+    devices.forEach(device => {
+      let existing = this.accessories.find(acc => acc.context.deviceId === device.id);
+      if (!existing) {
+        const accessory = new this.api.platformAccessory(device.name, UUIDGen.generate(device.id));
+        accessory.context.deviceId = device.id;
+
+        const emAcc = new EnergyMeterAccessory(this.log, device, accessory, this.api);
+        accessory.addService(emAcc.service);
+
+        this.accessories.push(accessory);
+        this.api.registerPlatformAccessories('homebridge-3em-energy-meter', '3EMEnergyMeter', [accessory]);
+        this.log(`Registered new accessory: ${device.name}`);
+      }
+    });
+  }
+}
+
+class EnergyMeterAccessory {
+  constructor(log, config, accessory, api) {
+    this.log = log;
+    this.config = config;
+    this.accessory = accessory;
+    this.api = api;
+
+    // Services
+    this.service = new Service.Outlet(this.config.name || 'Energy Meter');
+
+    // Eve characteristics
+    this.currentConsumption = new EveCurrentConsumption();
+    this.totalConsumption = new EveTotalConsumption();
+    this.voltage = new EveVoltage();
+
+    this.service.addCharacteristic(this.currentConsumption);
+    this.service.addCharacteristic(this.totalConsumption);
+    this.service.addCharacteristic(this.voltage);
+
+    // FakeGato for EVE history
+    this.historyService = new FakeGatoHistoryService('energy', this.accessory, { storage: 'fs', log: this.log });
+
+    // Poll device
+    this.pollingInterval = setInterval(() => this.updateValues(), 10000);
+  }
+
+  updateValues() {
+    this.getCurrentPower((err, watts) => {
+      if (!err) {
+        this.currentConsumption.updateValue(watts);
+        this.historyService.addEntry({ watts: watts, kilowatts: watts / 1000 });
+      }
+    });
+
+    this.getTotalEnergy((err, kWh) => {
+      if (!err) this.totalConsumption.updateValue(kWh);
+    });
+
+    this.getVoltage((err, volts) => {
+      if (!err) this.voltage.updateValue(volts);
+    });
+  }
+
+  // Shelly EM integration
+  getCurrentPower(callback) {
+    const options = {
+      hostname: this.config.host,
+      port: 80,
+      path: '/status',
+      method: 'GET',
+      auth: this.config.auth ? `${this.config.auth.user}:${this.config.auth.pass}` : undefined
+    };
+
+    const req = http.request(options, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const watts = json.emeters[0].power;
+          callback(null, watts);
+        } catch (e) { callback(e); }
+      });
+    });
+
+    req.on('error', e => callback(e));
+    req.end();
+  }
+
+  getTotalEnergy(callback) {
+    const options = {
+      hostname: this.config.host,
+      port: 80,
+      path: '/status',
+      method: 'GET',
+      auth: this.config.auth ? `${this.config.auth.user}:${this.config.auth.pass}` : undefined
+    };
+
+    const req = http.request(options, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const kWh = json.emeters[0].total / 1000; // Shelly returns Wh
+          callback(null, kWh);
+        } catch (e) { callback(e); }
+      });
+    });
+
+    req.on('error', e => callback(e));
+    req.end();
+  }
+
+  getVoltage(callback) {
+    const options = {
+      hostname: this.config.host,
+      port: 80,
+      path: '/status',
+      method: 'GET',
+      auth: this.config.auth ? `${this.config.auth.user}:${this.config.auth.pass}` : undefined
+    };
+
+    const req = http.request(options, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const volts = json.emeters[0].voltage;
+          callback(null, volts);
+        } catch (e) { callback(e); }
+      });
+    });
+
+    req.on('error', e => callback(e));
+    req.end();
+  }
+}
