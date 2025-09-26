@@ -100,17 +100,15 @@ function EnergyMeter (log, config) {
 	EveAmpere1.UUID = 'E863F126-079E-48FF-8F27-9C2605A29F52';
 	inherits(EveAmpere1, Characteristic);
 
-	// Fixed PowerMeterService constructor for Homebridge 2.0 compatibility
-	var PowerMeterService = function (displayName, subtype) {
-    // Use Service.apply instead of Service.call
-    Service.apply(this, [displayName, '00000001-0000-1777-8000-775D67EC4377', subtype]);
-    this.addCharacteristic(EvePowerConsumption);
-    this.addOptionalCharacteristic(EveTotalConsumption);
-    this.addOptionalCharacteristic(EveVoltage1);
-    this.addOptionalCharacteristic(EveAmpere1);
-};
-PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
-inherits(PowerMeterService, Service);
+	// Define custom service - using a different approach for Homebridge 2.0 compatibility
+	function createPowerMeterService(displayName, subtype) {
+		const service = new Service(displayName, '00000001-0000-1777-8000-775D67EC4377', subtype);
+		service.addCharacteristic(EvePowerConsumption);
+		service.addOptionalCharacteristic(EveTotalConsumption);
+		service.addOptionalCharacteristic(EveVoltage1);
+		service.addOptionalCharacteristic(EveAmpere1);
+		return service;
+	}
 
 	// local vars
 	this._EvePowerConsumption = EvePowerConsumption;
@@ -126,8 +124,8 @@ inherits(PowerMeterService, Service);
 			.setCharacteristic(Characteristic.FirmwareRevision, version)
 			.setCharacteristic(Characteristic.SerialNumber, this.serial);
 
-	// construct service
-	this.service = new PowerMeterService(this.name);
+	// construct service using the factory function instead of a constructor
+	this.service = createPowerMeterService(this.name);
 	this.service.getCharacteristic(this._EvePowerConsumption).on('get', this.getPowerConsumption.bind(this));
 	this.service.addCharacteristic(this._EveTotalConsumption).on('get', this.getTotalConsumption.bind(this));
 	this.service.addCharacteristic(this._EveVoltage1).on('get', this.getVoltage1.bind(this));
