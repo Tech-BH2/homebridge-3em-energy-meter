@@ -2,53 +2,34 @@
   "pluginAlias": "3EMEnergyMeter",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Shelly 3EM / EM Energy Meter Plugin",
-  "footerDisplay": "Add Shelly 3EM (3-phase) or Shelly EM (single-phase) devices here. Values are exposed to the Eve app and recorded to history.",
+  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
+  "footerDisplay": "This accessory is only fully supported in the third-party HomeKit app Eve.",
   "schema": {
     "type": "object",
     "properties": {
-      "name": {
-        "title": "Platform Name",
-        "type": "string",
-        "default": "Shelly Energy Meters"
-      },
       "devices": {
         "title": "Devices",
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["name", "ip"],
           "properties": {
             "name": {
               "title": "Device Name",
-              "type": "string"
+              "type": "string",
+              "required": true,
+              "description": "A friendly name for this Shelly 3EM device"
             },
-            "ip": {
-              "title": "Device IP Address",
-              "type": "string"
+            "host": {
+              "title": "Device Host / IP",
+              "type": "string",
+              "required": true,
+              "description": "The hostname or IP address of the Shelly 3EM (e.g. 192.168.1.50)"
             },
             "use_em": {
-              "title": "Shelly EM (single-phase) mode",
+              "title": "Use EM Mode",
               "type": "boolean",
-              "default": false
-            },
-            "use_em_mode": {
-              "title": "EM Channel mode (0 = combine ch1+ch2, 1 = channel1, 2 = channel2)",
-              "type": "integer",
-              "default": 0,
-              "enum": [0, 1, 2]
-            },
-            "update_interval": {
-              "title": "Update interval (ms)",
-              "type": "integer",
-              "default": 10000,
-              "minimum": 2000
-            },
-            "timeout": {
-              "title": "HTTP timeout (ms)",
-              "type": "integer",
-              "default": 5000,
-              "minimum": 1000
+              "default": false,
+              "description": "Enable if this device should be treated as an EM (single-phase) instead of a 3EM"
             }
           }
         }
