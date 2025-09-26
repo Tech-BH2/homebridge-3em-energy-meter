@@ -2,39 +2,23 @@
   "type": "object",
   "title": "3EM Energy Meter Platform",
   "properties": {
-    "platform": {
-      "type": "string",
-      "default": "3EMEnergyMeter"
-    },
     "name": {
       "type": "string",
-      "default": "3EMEnergyMeter"
+      "title": "Name",
+      "default": "EM - Energy Meter"
     },
     "devices": {
       "type": "array",
       "title": "Devices",
       "items": {
         "type": "object",
+        "required": ["id", "name", "host"],
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Device ID",
-            "default": "shellyem1"
-          },
-          "name": {
-            "type": "string",
-            "title": "Device Name",
-            "default": "Energy Meter"
-          },
-          "host": {
-            "type": "string",
-            "title": "Device IP Address",
-            "default": "192.168.2.95"
-          }
-        },
-        "required": ["id", "name", "host"]
+          "id": { "type": "string", "title": "Device ID" },
+          "name": { "type": "string", "title": "Device Name" },
+          "host": { "type": "string", "title": "Device Host (IP Address)" }
+        }
       }
     }
-  },
-  "required": ["platform", "name", "devices"]
+  }
 }
