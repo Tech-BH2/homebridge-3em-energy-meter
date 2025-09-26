@@ -1,60 +1,57 @@
 {
-  "pluginAlias": "3EMEnergyMeter",
-  "pluginType": "platform",
-  "singular": true,
-  "headerDisplay": "Shelly 3EM Energy Meter Platform",
-  "footerDisplay": "Supports HomeKit/EVE energy monitoring with Shelly 3EM.",
-  "schema": {
-    "type": "object",
-    "properties": {
-      "name": {
-        "title": "Platform Name",
-        "type": "string",
-        "default": "3EM Energy Meter"
-      },
-      "devices": {
-        "title": "Shelly Devices",
-        "type": "array",
-        "minItems": 1,
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "title": "Device Name",
-              "type": "string",
-              "default": "Main Meter"
-            },
-            "host": {
-              "title": "IP Address / Hostname",
-              "type": "string",
-              "description": "The IP address of your Shelly 3EM device."
-            },
-            "auth": {
-              "title": "Authentication (Optional)",
-              "type": "object",
-              "properties": {
-                "user": {
-                  "title": "Username",
-                  "type": "string"
-                },
-                "pass": {
-                  "title": "Password",
-                  "type": "string"
-                }
-              },
-              "required": []
-            },
-            "use_em": {
-              "title": "Use EM Mode",
-              "type": "boolean",
-              "default": true,
-              "description": "Must be enabled for single-phase Shelly EM."
-            }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "3EM Energy Meter Platform",
+  "type": "object",
+  "properties": {
+    "platform": {
+      "type": "string",
+      "default": "3EMEnergyMeter",
+      "title": "Platform",
+      "description": "The platform name for Homebridge"
+    },
+    "name": {
+      "type": "string",
+      "default": "3EMEnergyMeter Platform",
+      "title": "Platform Name",
+      "description": "Display name of the platform in Homebridge"
+    },
+    "devices": {
+      "type": "array",
+      "title": "Devices",
+      "description": "List of Shelly EM devices to monitor",
+      "items": {
+        "type": "object",
+        "required": ["name", "host", "use_em"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Device Name",
+            "description": "Friendly name for this device"
           },
-          "required": ["name", "host"]
+          "host": {
+            "type": "string",
+            "title": "Shelly Device Host",
+            "description": "IP address or hostname of your Shelly EM"
+          },
+          "use_em": {
+            "type": "boolean",
+            "default": true,
+            "title": "Use EMeters Array",
+            "description": "Enable this for single-phase Shelly EM devices"
+          },
+          "auth": {
+            "type": "object",
+            "title": "Optional HTTP Auth",
+            "description": "Provide if your Shelly requires username/password",
+            "properties": {
+              "user": { "type": "string", "title": "Username", "default": "" },
+              "pass": { "type": "string", "title": "Password", "default": "" }
+            },
+            "required": []
+          }
         }
       }
-    },
-    "required": ["name", "devices"]
-  }
+    }
+  },
+  "required": ["platform", "name", "devices"]
 }

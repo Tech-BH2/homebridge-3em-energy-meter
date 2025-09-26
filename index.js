@@ -1,8 +1,7 @@
 'use strict';
 
 const http = require('http');
-const https = require('https');
-const url = require('url');
+const util = require('util');
 
 let Service, Characteristic, UUIDGen, FakeGatoHistoryService;
 
@@ -11,24 +10,18 @@ module.exports = (api) => {
   Characteristic = api.hap.Characteristic;
   UUIDGen = api.hap.uuid;
 
-  // Initialize FakeGato
-  FakeGatoHistoryService = require('fakegato-history')(api);
-
-  // ------------------------
-  // Custom Characteristics
-  // ------------------------
+  // Eve custom characteristics
   class EveCurrentConsumption extends Characteristic {
     constructor() {
       super('Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
       this.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'W',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
       });
       this.value = this.getDefaultValue();
     }
   }
-  EveCurrentConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
 
   class EveTotalConsumption extends Characteristic {
     constructor() {
@@ -36,12 +29,11 @@ module.exports = (api) => {
       this.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'kWh',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
       });
       this.value = this.getDefaultValue();
     }
   }
-  EveTotalConsumption.UUID = 'E863F11D-079E-48FF-8F27-9C2605A29F52';
 
   class EveVoltage extends Characteristic {
     constructor() {
@@ -49,144 +41,157 @@ module.exports = (api) => {
       this.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'V',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
       });
       this.value = this.getDefaultValue();
     }
   }
-  EveVoltage.UUID = 'E863F12D-079E-48FF-8F27-9C2605A29F52';
 
-  // ------------------------
-  // Helper function to GET JSON from Shelly device
-  // ------------------------
-  function getJSON(host, path, auth, callback) {
-    const isHttps = host.startsWith('https://');
-    const parsedUrl = url.parse((isHttps ? 'https://' : 'http://') + host + path);
+  // Initialize FakeGato
+  FakeGatoHistoryService = require('fakegato-history')(api);
 
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (isHttps ? 443 : 80),
-      path: parsedUrl.path,
-      method: 'GET',
-      auth: auth ? `${auth.user}:${auth.pass}` : undefined,
-      timeout: 5000
-    };
-
-    const reqModule = isHttps ? https : http;
-
-    const req = reqModule.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          callback(null, json);
-        } catch (err) {
-          callback(err);
-        }
-      });
-    });
-
-    req.on('error', (err) => callback(err));
-    req.on('timeout', () => {
-      req.destroy();
-      callback(new Error('Request timed out'));
-    });
-
-    req.end();
-  }
-
-  // ------------------------
-  // EnergyMeter Accessory
-  // ------------------------
+  // EnergyMeterAccessory
   class EnergyMeterAccessory {
-    constructor(device, log) {
+    constructor(log, device) {
+      this.log = log;
       this.name = device.name;
       this.host = device.host;
-      this.use_em = device.use_em;
-      this.auth = device.auth;
-      this.log = log;
+      this.use_em = device.use_em || false;
+      this.auth = device.auth || {};
+      this.services = [];
 
+      // Main Outlet service for HomeKit
       this.service = new Service.Outlet(this.name);
-      this.service.getCharacteristic(Characteristic.On)
-        .onGet(() => true); // Always on, for EVE consumption
 
-      // Add custom characteristics
+      // Add custom Eve characteristics
       this.currentConsumption = this.service.addCharacteristic(new EveCurrentConsumption());
       this.totalConsumption = this.service.addCharacteristic(new EveTotalConsumption());
       this.voltage = this.service.addCharacteristic(new EveVoltage());
 
-      // FakeGato for EVE history
-      this.historyService = new FakeGatoHistoryService('energy', this, { storage: 'fs', minutes: 1 });
+      // FakeGato history
+      this.fakeGatoService = new FakeGatoHistoryService('energy', this.service, { storage: 'fs' });
 
       // Start polling
       this.poll();
-      setInterval(() => this.poll(), 10000);
     }
 
     poll() {
-      // Use Shelly EM endpoint
-      getJSON(this.host, '/status', this.auth, (err, data) => {
-        if (err) {
-          this.log('Error fetching data from', this.name, err.message);
-          return;
-        }
+      this.updateValues();
+      setInterval(() => this.updateValues(), 10000); // every 10s
+    }
 
-        // Single-phase values
-        const emeter = this.use_em && data.emeters ? data.emeters[0] : data.emeter || { power: 0, total: 0, voltage: 0 };
+    updateValues() {
+      this.getCurrentPower((err, currentPower) => {
+        if (!err) this.currentConsumption.updateValue(currentPower);
+      });
 
-        const power = emeter.power || 0;
-        const total = emeter.total || 0;
-        const voltage = emeter.voltage || 0;
+      this.getTotalEnergy((err, totalEnergy) => {
+        if (!err) this.totalConsumption.updateValue(totalEnergy);
+      });
 
-        this.currentConsumption.updateValue(power);
-        this.totalConsumption.updateValue(total);
-        this.voltage.updateValue(voltage);
+      this.getVoltage((err, voltage) => {
+        if (!err) this.voltage.updateValue(voltage);
+      });
 
-        this.historyService.addEntry({
-          time: Math.floor(Date.now() / 1000),
-          power: power,
-          voltage: voltage,
-          temp: 0
+      // Log to FakeGato
+      if (this.fakeGatoService && typeof this.fakeGatoService.addEntry === 'function') {
+        this.fakeGatoService.addEntry({
+          time: Math.floor(new Date().getTime() / 1000),
+          watts: this.currentConsumption.value,
+          kilowatts: this.totalConsumption.value,
+        });
+      }
+    }
+
+    // Shelly EM HTTP Polling Methods
+    getCurrentPower(callback) {
+      const path = this.use_em ? '/status/emeters/0' : '/status';
+      this.httpGet(path, (err, data) => {
+        if (err) return callback(err);
+        const power = data.power || (data.emeters && data.emeters[0] && data.emeters[0].power) || 0;
+        callback(null, power);
+      });
+    }
+
+    getTotalEnergy(callback) {
+      const path = this.use_em ? '/status/emeters/0' : '/status';
+      this.httpGet(path, (err, data) => {
+        if (err) return callback(err);
+        const total = data.total || (data.emeters && data.emeters[0] && data.emeters[0].total) || 0;
+        callback(null, total);
+      });
+    }
+
+    getVoltage(callback) {
+      const path = '/status';
+      this.httpGet(path, (err, data) => {
+        if (err) return callback(err);
+        const voltage = data.voltage || 0;
+        callback(null, voltage);
+      });
+    }
+
+    httpGet(path, callback) {
+      const options = {
+        host: this.host,
+        port: 80,
+        path,
+        auth: this.auth.user && this.auth.pass ? `${this.auth.user}:${this.auth.pass}` : undefined,
+        method: 'GET',
+      };
+
+      const req = http.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            callback(null, data);
+          } catch (e) {
+            callback(e);
+          }
         });
       });
+
+      req.on('error', (err) => callback(err));
+      req.end();
     }
 
     getServices() {
-      return [this.service, this.historyService];
+      return [this.service, this.fakeGatoService];
     }
   }
 
-  // ------------------------
-  // Platform Definition
-  // ------------------------
+  // EnergyMeterPlatform
   class EnergyMeterPlatform {
-    constructor(log, config) {
+    constructor(log, config, api) {
       this.log = log;
       this.config = config;
+      this.api = api;
       this.accessories = [];
 
-      if (!config.devices || !Array.isArray(config.devices)) {
-        log('No devices configured');
+      if (!this.config || !this.config.devices) {
+        log.error('No devices configured for 3EMEnergyMeter platform');
         return;
       }
 
-      this.config.devices.forEach(device => {
+      this.api.on('didFinishLaunching', () => this.discoverDevices());
+    }
+
+    discoverDevices() {
+      this.config.devices.forEach((deviceConfig) => {
         try {
-          const accessory = new EnergyMeterAccessory(device, log);
+          const accessory = new EnergyMeterAccessory(this.log, deviceConfig);
           this.accessories.push(accessory);
-        } catch (err) {
-          log('Failed to create accessory for', device.name, err.message);
+          this.log.info(`3EMEnergyMeter: Registered accessory: ${accessory.name}`);
+        } catch (e) {
+          this.log.error(`Failed to create accessory for ${deviceConfig.name}: ${e.message}`);
         }
       });
     }
 
-    configureAccessory(accessory) {
-      // Called by Homebridge, can be ignored in this simple implementation
-    }
-
-    discoverDevices(callback) {
-      callback();
+    accessories() {
+      return this.accessories;
     }
   }
 
