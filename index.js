@@ -1,11 +1,8 @@
 /**
- * Updated for Homebridge 2.0 API
- * - module.exports is (api) => { ... }
- * - uses api.hap for Service/Characteristic
- * - initializes fakegato-history with api.hap
- * - fixes promise resolution bug (returns an object with all values)
- *
- * NOTE: This file retains the original plugin behavior and settings.
+ * Updated for Homebridge 2.0 API with Fakegato compatibility fix
+ * - Proper fakegato-history init (Service + Characteristic passed explicitly)
+ * - Defensive guards for undefined JSON fields
+ * - Accessory registration remains (works if placed under "accessories" in config.json)
  */
 
 var inherits = require('util').inherits;
@@ -17,15 +14,18 @@ const version = require('./package.json').version;
 module.exports = function (api) {
   Service = api.hap.Service;
   Characteristic = api.hap.Characteristic;
-  FakeGatoHistoryService = require('fakegato-history')(api.hap);
-  // Register accessory (keep plugin identifier and accessory name as original)
+  FakeGatoHistoryService = require('fakegato-history')({
+    hap: api.hap,
+    Service: api.hap.Service,
+    Characteristic: api.hap.Characteristic
+  });
   api.registerAccessory("homebridge-3em-energy-meter", "3EMEnergyMeter", EnergyMeter);
 }
 
 function EnergyMeter (log, config) {
   this.log = log;
   this.ip = config["ip"] || "127.0.0.1";
-  this.url = "http://" + this.ip + "/status/emeters?"; // endpoint used by original plugin
+  this.url = "http://" + this.ip + "/status/emeters?";
   this.auth = config["auth"];
   this.name = config["name"] || "Shelly 3EM";
   this.displayName = this.name;
@@ -39,7 +39,6 @@ function EnergyMeter (log, config) {
   this.debug_log = config["debug_log"] || false;
   this.serial = config.serial || "9000000";
 
-  // internal variables
   this.waiting_response = false;
   this.powerConsumption = 0;
   this.totalPowerConsumption = 0;
@@ -49,7 +48,7 @@ function EnergyMeter (log, config) {
   this.pf1 = 1;
   this.pf2 = 1;
 
-  // EVE characteristics (custom UUIDs used by the original plugin)
+  // Eve custom characteristics
   var EvePowerConsumption = function () {
     Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
     this.setProps({
@@ -120,201 +119,117 @@ function EnergyMeter (log, config) {
   PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
   inherits(PowerMeterService, Service);
 
-  // local vars
   this._EvePowerConsumption = EvePowerConsumption;
   this._EveTotalConsumption = EveTotalConsumption;
   this._EveVoltage1 = EveVoltage1;
   this._EveAmpere1 = EveAmpere1;
 
-  // info
   this.informationService = new Service.AccessoryInformation();
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "Shelly - produdegr")
-    .setCharacteristic(Characteristic.Model, "Shelly 3EM")
+    .setCharacteristic(Characteristic.Model, "Shelly 3EM/EM")
     .setCharacteristic(Characteristic.FirmwareRevision, version)
     .setCharacteristic(Characteristic.SerialNumber, this.serial);
 
-  // construct service
   this.service = new PowerMeterService(this.name);
   this.service.getCharacteristic(this._EvePowerConsumption).on('get', this.getPowerConsumption.bind(this));
   this.service.addCharacteristic(this._EveTotalConsumption).on('get', this.getTotalConsumption.bind(this));
   this.service.addCharacteristic(this._EveVoltage1).on('get', this.getVoltage1.bind(this));
   this.service.addCharacteristic(this._EveAmpere1).on('get', this.getAmpere1.bind(this));
 
-  // add fakegato (energy)
   try {
     this.historyService = new FakeGatoHistoryService("energy", this, {storage:'fs'});
   } catch (e) {
-    // if fakegato isn't available or fails, don't crash the plugin
     this.log("fakegato-history init failed: " + e.message);
     this.historyService = null;
   }
 }
 
 EnergyMeter.prototype.updateState = function () {
-  if (this.waiting_response) {
-    this.log('Please select a higher update_interval value. Http command may not finish!');
-    return;
-  }
+  if (this.waiting_response) return;
   this.waiting_response = true;
 
   var self = this;
-
   var ops = {
     uri: this.url,
     method: this.http_method,
     timeout: this.timeout
   };
-  if (this.auth) {
-    ops.auth = { user: this.auth.user, pass: this.auth.pass };
-  }
-
-  if (this.debug_log) {
-    this.log('Requesting energy values from Shelly 3EM(EM) ...');
-  }
+  if (this.auth) ops.auth = { user: this.auth.user, pass: this.auth.pass };
 
   request(ops, function (error, res, body) {
-    var json = null;
     if (error) {
-      self.log('Bad http response! (' + ops.uri + '): ' + error.message);
+      self.log('HTTP error: ' + error.message);
       self.waiting_response = false;
       return;
     }
 
     try {
-      json = JSON.parse(body);
+      var json = JSON.parse(body);
+      if (!json || !json.emeters) throw new Error("Invalid JSON response");
 
-      if ((self.use_pf) && (self.use_em == false)) {
-        self.pf0 = parseFloat(json.emeters[0].pf);
-        self.pf1 = parseFloat(json.emeters[1].pf);
-        self.pf2 = parseFloat(json.emeters[2].pf);
-      } else {
-        self.pf0 = 1;
-        self.pf1 = 1;
-        self.pf2 = 1;
-      }
+      // defaults
+      var pwr = 0, tot = 0, volt = 0, amp = 0;
 
-      // calculate based on configuration (keeps original logic)
       if (self.use_em) {
-        if (self.use_em_mode == 0) {
-          if (self.negative_handling_mode == 0) {
-            self.powerConsumption = (parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power));
-            self.totalPowerConsumption = ((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total)) / 1000);
-            self.voltage1 = (((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage)) / 2));
-            self.ampere1 = ((self.powerConsumption / self.voltage1));
-            if (self.powerConsumption < 0) self.powerConsumption = 0;
-            if (self.totalPowerConsumption < 0) self.totalPowerConsumption = 0;
-            if (self.voltage1 < 0) self.voltage1 = 0;
-            if (self.ampere1 < 0) self.ampere1 = 0;
-          } else {
-            self.powerConsumption = Math.abs(parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power));
-            self.totalPowerConsumption = Math.abs((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total)) / 1000);
-            self.voltage1 = Math.abs(((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage)) / 2));
-            self.ampere1 = Math.abs((self.powerConsumption / self.voltage1));
-          }
-        } else if (self.use_em_mode == 1) {
-          if (self.negative_handling_mode == 0) {
-            self.powerConsumption = (parseFloat(json.emeters[0].power));
-            self.totalPowerConsumption = (parseFloat(json.emeters[0].total) / 1000);
-            self.voltage1 = (parseFloat(json.emeters[0].voltage));
-            self.ampere1 = ((self.powerConsumption / self.voltage1));
-            if (self.powerConsumption < 0) self.powerConsumption = 0;
-            if (self.totalPowerConsumption < 0) self.totalPowerConsumption = 0;
-            if (self.voltage1 < 0) self.voltage1 = 0;
-            if (self.ampere1 < 0) self.ampere1 = 0;
-          } else {
-            self.powerConsumption = Math.abs(parseFloat(json.emeters[0].power));
-            self.totalPowerConsumption = Math.abs(parseFloat(json.emeters[0].total) / 1000);
-            self.voltage1 = Math.abs(parseFloat(json.emeters[0].voltage));
-            self.ampere1 = Math.abs((self.powerConsumption / self.voltage1));
-          }
-        } else if (self.use_em_mode == 2) {
-          if (self.negative_handling_mode == 0) {
-            self.powerConsumption = (parseFloat(json.emeters[1].power));
-            self.totalPowerConsumption = (parseFloat(json.emeters[1].total) / 1000);
-            self.voltage1 = (parseFloat(json.emeters[1].voltage));
-            self.ampere1 = ((self.powerConsumption / self.voltage1));
-            if (self.powerConsumption < 0) self.powerConsumption = 0;
-            if (self.totalPowerConsumption < 0) self.totalPowerConsumption = 0;
-            if (self.voltage1 < 0) self.voltage1 = 0;
-            if (self.ampere1 < 0) self.ampere1 = 0;
-          } else {
-            self.powerConsumption = Math.abs(parseFloat(json.emeters[1].power));
-            self.totalPowerConsumption = Math.abs(parseFloat(json.emeters[1].total) / 1000);
-            self.voltage1 = Math.abs(parseFloat(json.emeters[1].voltage));
-            self.ampere1 = Math.abs((self.powerConsumption / self.voltage1));
-          }
+        var emIndex = self.use_em_mode; // 0 = combine, 1 or 2 = single channel
+        if (emIndex === 0 && json.emeters.length >= 2) {
+          pwr = parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power);
+          tot = (parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total)) / 1000;
+          volt = (parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage)) / 2;
+          amp = volt ? pwr / volt : 0;
+        } else if (json.emeters[emIndex]) {
+          pwr = parseFloat(json.emeters[emIndex].power);
+          tot = parseFloat(json.emeters[emIndex].total) / 1000;
+          volt = parseFloat(json.emeters[emIndex].voltage);
+          amp = volt ? pwr / volt : 0;
         }
+      } else if (json.emeters.length >= 3) {
+        pwr = parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power) + parseFloat(json.emeters[2].power);
+        tot = (parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total) + parseFloat(json.emeters[2].total)) / 1000;
+        volt = (parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage) + parseFloat(json.emeters[2].voltage)) / 3;
+        amp = (parseFloat(json.emeters[0].current) + parseFloat(json.emeters[1].current) + parseFloat(json.emeters[2].current));
+      }
+
+      if (self.negative_handling_mode === 0) {
+        if (pwr < 0) pwr = 0;
+        if (tot < 0) tot = 0;
+        if (volt < 0) volt = 0;
+        if (amp < 0) amp = 0;
       } else {
-        // 3EM device - sum three phases (original behaviour)
-        if (self.negative_handling_mode == 0) {
-          self.powerConsumption = (parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power) + parseFloat(json.emeters[2].power));
-          self.totalPowerConsumption = ((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total) + parseFloat(json.emeters[2].total)) / 1000);
-          self.voltage1 = (((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage) + parseFloat(json.emeters[2].voltage)) / 3));
-          self.ampere1 = (((parseFloat(json.emeters[0].current) * self.pf0) + (parseFloat(json.emeters[1].current) * self.pf1) + (parseFloat(json.emeters[2].current) * self.pf2)));
-          if (self.powerConsumption < 0) self.powerConsumption = 0;
-          if (self.totalPowerConsumption < 0) self.totalPowerConsumption = 0;
-          if (self.voltage1 < 0) self.voltage1 = 0;
-          if (self.ampere1 < 0) self.ampere1 = 0;
-        } else {
-          self.powerConsumption = Math.abs(parseFloat(json.emeters[0].power) + parseFloat(json.emeters[1].power) + parseFloat(json.emeters[2].power));
-          self.totalPowerConsumption = Math.abs((parseFloat(json.emeters[0].total) + parseFloat(json.emeters[1].total) + parseFloat(json.emeters[2].total)) / 1000);
-          self.voltage1 = Math.abs(((parseFloat(json.emeters[0].voltage) + parseFloat(json.emeters[1].voltage) + parseFloat(json.emeters[2].voltage)) / 3));
-          self.ampere1 = Math.abs(((parseFloat(json.emeters[0].current) * self.pf0) + (parseFloat(json.emeters[1].current) * self.pf1) + (parseFloat(json.emeters[2].current) * self.pf2)));
-        }
+        pwr = Math.abs(pwr);
+        tot = Math.abs(tot);
+        volt = Math.abs(volt);
+        amp = Math.abs(amp);
       }
 
-      if (self.debug_log) {
-        self.log('[ voltage: ' + self.voltage1.toFixed(0) + 'V, current: ' + self.ampere1.toFixed(1) + 'A, consumption: ' + self.powerConsumption.toFixed(0) + 'W, total consumption: ' + self.totalPowerConsumption.toFixed(2) + 'kWh ]');
+      self.powerConsumption = isNaN(pwr) ? 0 : pwr;
+      self.totalPowerConsumption = isNaN(tot) ? 0 : tot;
+      self.voltage1 = isNaN(volt) ? 0 : volt;
+      self.ampere1 = isNaN(amp) ? 0 : amp;
+
+      self.service.getCharacteristic(self._EvePowerConsumption).updateValue(self.powerConsumption);
+      self.service.getCharacteristic(self._EveTotalConsumption).updateValue(self.totalPowerConsumption);
+      self.service.getCharacteristic(self._EveVoltage1).updateValue(self.voltage1);
+      self.service.getCharacteristic(self._EveAmpere1).updateValue(self.ampere1);
+
+      if (self.historyService) {
+        self.historyService.addEntry({time: Math.round(new Date().valueOf() / 1000), power: Math.round(self.powerConsumption)});
       }
 
-      // set characteristics (EVE-compatible)
-      try {
-        self.service.getCharacteristic(self._EvePowerConsumption).setValue(self.powerConsumption);
-        if (self.service.getCharacteristic(self._EveTotalConsumption)) {
-          self.service.getCharacteristic(self._EveTotalConsumption).setValue(self.totalPowerConsumption);
-        }
-        if (self.service.getCharacteristic(self._EveVoltage1)) {
-          self.service.getCharacteristic(self._EveVoltage1).setValue(self.voltage1);
-        }
-        if (self.service.getCharacteristic(self._EveAmpere1)) {
-          self.service.getCharacteristic(self._EveAmpere1).setValue(self.ampere1);
-        }
-      } catch (e) {
-        self.log("Error setting characteristics: " + e.message);
-      }
-
-      // add to fakegato history if available
-      if (self.historyService && typeof self.historyService.addEntry === 'function') {
-        try {
-          self.historyService.addEntry({time: Math.round(new Date().valueOf() / 1000), power: Math.round(self.powerConsumption)});
-        } catch (e) {
-          // ignore history errors
-        }
-      }
-
-    } catch (parseErr) {
-      self.log('Error processing data: ' + parseErr.message);
+    } catch (e) {
+      self.log("Parse error: " + e.message);
     }
-
     self.waiting_response = false;
   });
 };
 
-EnergyMeter.prototype.getPowerConsumption = function (callback) {
-  callback(null, this.powerConsumption);
-};
-EnergyMeter.prototype.getTotalConsumption = function (callback) {
-  callback(null, this.totalPowerConsumption);
-};
-EnergyMeter.prototype.getVoltage1 = function (callback) {
-  callback(null, this.voltage1);
-};
-EnergyMeter.prototype.getAmpere1 = function (callback) {
-  callback(null, this.ampere1);
-};
+EnergyMeter.prototype.getPowerConsumption = function (cb) { cb(null, this.powerConsumption); };
+EnergyMeter.prototype.getTotalConsumption = function (cb) { cb(null, this.totalPowerConsumption); };
+EnergyMeter.prototype.getVoltage1 = function (cb) { cb(null, this.voltage1); };
+EnergyMeter.prototype.getAmpere1 = function (cb) { cb(null, this.ampere1); };
+
 EnergyMeter.prototype.getServices = function () {
-  this.log("getServices: " + this.name);
   if (this.update_interval > 0) {
     this.timer = setInterval(this.updateState.bind(this), this.update_interval);
   }

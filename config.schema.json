@@ -1,71 +1,84 @@
 {
-  "pluginAlias": "3EMEnergyMeter",
-  "pluginType": "accessory",
-  "headerDisplay": "Shelly 3EM Energy Meter Plugin",
-  "footerDisplay": "This accessory will only be supported in the third-party Homekit app EVE.",
-  "schema": {
-    "type": "object",
-    "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string"
-      },
-      "ip": {
-        "title": "Shelly IP address",
-        "type": "string"
-      },
-      "auth": {
-        "title": "Auth (optional)",
-        "type": "object",
-        "properties": {
-          "user": { "title": "Username", "type": "string" },
-          "pass": { "title": "Password", "type": "string" }
-        }
-      },
-      "timeout": {
-        "title": "HTTP timeout (ms)",
-        "type": "integer",
-        "default": 5000
-      },
-      "update_interval": {
-        "title": "Update interval (ms)",
-        "type": "integer",
-        "default": 10000
-      },
-      "use_em": {
-        "title": "Use Shelly EM device (single/double channel EM)",
-        "type": "boolean",
-        "default": false
-      },
-      "use_em_mode": {
-        "title": "EM mode (0 = combine ch1+ch2 / 1 = channel1 / 2 = channel2)",
-        "type": "integer",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 2
-      },
-      "negative_handling_mode": {
-        "title": "Negative handling (0 = zero negatives, 1 = absolute values)",
-        "type": "integer",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 1
-      },
-      "use_pf": {
-        "title": "Use Power Factor when calculating current (pf)",
-        "type": "boolean",
-        "default": false
-      },
-      "debug_log": {
-        "title": "Enable debug logging",
-        "type": "boolean",
-        "default": false
-      },
-      "serial": {
-        "title": "Accessory serial number (unique required for fakegato-history)",
-        "type": "string"
-      }
-    },
-    "required": ["name","ip"]
-  }
+"pluginAlias": "3EMEnergyMeter",
+"pluginType": "accessory",
+"singular": true,
+"headerDisplay": "Shelly 3EM / EM Energy Meter Plugin",
+"footerDisplay": "Reports power data to the Eve app with historical logging.",
+"schema": {
+"type": "object",
+"properties": {
+"name": {
+"title": "Name",
+"type": "string",
+"required": true,
+"default": "Shelly 3EM"
+},
+"ip": {
+"title": "Device IP Address",
+"type": "string",
+"required": true,
+"format": "hostname"
+},
+"auth": {
+"title": "Authentication",
+"type": "object",
+"properties": {
+"user": {
+"title": "Username",
+"type": "string"
+},
+"pass": {
+"title": "Password",
+"type": "string"
+}
+}
+},
+"update_interval": {
+"title": "Update Interval (ms)",
+"type": "integer",
+"default": 10000,
+"minimum": 1000
+},
+"timeout": {
+"title": "Request Timeout (ms)",
+"type": "integer",
+"default": 5000,
+"minimum": 1000
+},
+"use_em": {
+"title": "Use Shelly EM (Single Phase)",
+"type": "boolean",
+"default": false
+},
+"use_em__mode": {
+"title": "Shelly EM Mode (0=Combine, 1=Channel 1, 2=Channel 2)",
+"type": "integer",
+"default": 0,
+"enum": [
+0,
+1,
+2
+]
+},
+"negative_handling_mode": {
+"title": "Negative Power Handling (0=Clamp to 0, 1=Absolute Value)",
+"type": "integer",
+"default": 0,
+"enum": [
+0,
+1
+]
+},
+"serial": {
+"title": "Serial Number",
+"type": "string",
+"default": "9000000"
+},
+"debug_log": {
+"title": "Enable Debug Logging",
+"type": "boolean",
+"default": false
+}
+}
+}
 }
