@@ -1,55 +1,19 @@
-'use strict';
+const http = require("http");
+const FakeGatoHistoryService = require("fakegato-history");
 
-const http = require('http');
-const util = require('util');
-let Service, Characteristic, UUIDGen, FakeGatoHistoryService;
+let Service, Characteristic, UUIDGen;
 
 module.exports = (api) => {
   Service = api.hap.Service;
   Characteristic = api.hap.Characteristic;
   UUIDGen = api.hap.uuid;
 
-  // Eve custom characteristics
-  class EveCurrentConsumption extends Characteristic {
-    constructor() {
-      super('Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-      this.setProps({
-        format: Characteristic.Formats.FLOAT,
-        unit: 'W',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-      });
-      this.value = this.getDefaultValue();
-    }
-  }
-
-  class EveTotalConsumption extends Characteristic {
-    constructor() {
-      super('Total Consumption', 'E863F11D-079E-48FF-8F27-9C2605A29F52');
-      this.setProps({
-        format: Characteristic.Formats.FLOAT,
-        unit: 'kWh',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-      });
-      this.value = this.getDefaultValue();
-    }
-  }
-
-  class EveVoltage extends Characteristic {
-    constructor() {
-      super('Voltage', 'E863F12D-079E-48FF-8F27-9C2605A29F52');
-      this.setProps({
-        format: Characteristic.Formats.FLOAT,
-        unit: 'V',
-        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
-      });
-      this.value = this.getDefaultValue();
-    }
-  }
-
-  FakeGatoHistoryService = require('fakegato-history')(api);
-
-  // Register platform
-  api.registerPlatform('homebridge-3em-energy-meter', '3EMEnergyMeter', EnergyMeterPlatform, true);
+  api.registerPlatform(
+    "homebridge-3em-energy-meter",
+    "3EMEnergyMeter",
+    EnergyMeterPlatform,
+    true
+  );
 };
 
 class EnergyMeterPlatform {
@@ -58,155 +22,155 @@ class EnergyMeterPlatform {
     this.config = config || {};
     this.api = api;
     this.accessories = [];
+    this.devices = this.config.devices || [];
 
-    if (api) {
-      api.on('didFinishLaunching', () => {
-        this.discoverDevices();
-      });
-    }
-  }
-
-  configureAccessory(accessory) {
-    // Called once for each cached accessory restored
-    this.accessories.push(accessory);
-    this.log(`Restored accessory from cache: ${accessory.displayName}`);
+    api.on("didFinishLaunching", () => {
+      this.log("3EMEnergyMeter: didFinishLaunching — creating/restoring devices");
+      this.discoverDevices();
+    });
   }
 
   discoverDevices() {
-    const devices = this.config.devices || [];
-    devices.forEach(device => {
-      let existing = this.accessories.find(acc => acc.context.deviceId === device.id);
-      if (!existing) {
-        const accessory = new this.api.platformAccessory(device.name, UUIDGen.generate(device.id));
-        accessory.context.deviceId = device.id;
+    this.devices.forEach((device) => {
+      if (!device.host) {
+        this.log.error(`Device ${device.name || "Unnamed"} missing host`);
+        return;
+      }
 
-        const emAcc = new EnergyMeterAccessory(this.log, device, accessory, this.api);
-        accessory.addService(emAcc.service);
+      const uuid = UUIDGen.generate(device.id || device.name);
+      let accessory = this.accessories.find((acc) => acc.UUID === uuid);
 
+      if (!accessory) {
+        this.log(`Creating new accessory for ${device.name}`);
+        accessory = new this.api.platformAccessory(device.name, uuid);
+
+        new EnergyMeterAccessory(this.log, accessory, device, this.api);
+
+        this.api.registerPlatformAccessories(
+          "homebridge-3em-energy-meter",
+          "3EMEnergyMeter",
+          [accessory]
+        );
         this.accessories.push(accessory);
-        this.api.registerPlatformAccessories('homebridge-3em-energy-meter', '3EMEnergyMeter', [accessory]);
-        this.log(`Registered new accessory: ${device.name}`);
+      } else {
+        this.log(`Restoring accessory for ${device.name}`);
+        new EnergyMeterAccessory(this.log, accessory, device, this.api);
       }
     });
+  }
+
+  configureAccessory(accessory) {
+    this.accessories.push(accessory);
   }
 }
 
 class EnergyMeterAccessory {
-  constructor(log, config, accessory, api) {
+  constructor(log, accessory, device, api) {
     this.log = log;
-    this.config = config;
     this.accessory = accessory;
+    this.device = device;
     this.api = api;
 
-    // Services
-    this.service = new Service.Outlet(this.config.name || 'Energy Meter');
+    this.service =
+      this.accessory.getService(Service.Outlet) ||
+      this.accessory.addService(Service.Outlet, device.name);
+
+    // FakeGato history
+    this.loggingService = new FakeGatoHistoryService("energy", this.accessory, {
+      storage: "fs",
+    });
 
     // Eve characteristics
-    this.currentConsumption = new EveCurrentConsumption();
-    this.totalConsumption = new EveTotalConsumption();
-    this.voltage = new EveVoltage();
+    this.currentConsumption = this.service.addCharacteristic(
+      class EveCurrentConsumption extends Characteristic {
+        constructor() {
+          super("Current Consumption", "E863F10D-079E-48FF-8F27-9C2605A29F52");
+          this.setProps({
+            format: api.hap.Formats.FLOAT,
+            unit: "W",
+            perms: [api.hap.Perms.READ, api.hap.Perms.NOTIFY],
+          });
+          this.value = this.getDefaultValue();
+        }
+      }
+    );
 
-    this.service.addCharacteristic(this.currentConsumption);
-    this.service.addCharacteristic(this.totalConsumption);
-    this.service.addCharacteristic(this.voltage);
+    this.totalConsumption = this.service.addCharacteristic(
+      class EveTotalConsumption extends Characteristic {
+        constructor() {
+          super("Total Consumption", "E863F10C-079E-48FF-8F27-9C2605A29F52");
+          this.setProps({
+            format: api.hap.Formats.FLOAT,
+            unit: "kWh",
+            perms: [api.hap.Perms.READ, api.hap.Perms.NOTIFY],
+          });
+          this.value = this.getDefaultValue();
+        }
+      }
+    );
 
-    // FakeGato for EVE history
-    this.historyService = new FakeGatoHistoryService('energy', this.accessory, { storage: 'fs', log: this.log });
+    this.voltage = this.service.addCharacteristic(
+      class EveVoltage extends Characteristic {
+        constructor() {
+          super("Voltage", "E863F10A-079E-48FF-8F27-9C2605A29F52");
+          this.setProps({
+            format: api.hap.Formats.FLOAT,
+            unit: "V",
+            perms: [api.hap.Perms.READ, api.hap.Perms.NOTIFY],
+          });
+          this.value = this.getDefaultValue();
+        }
+      }
+    );
 
-    // Poll device
-    this.pollingInterval = setInterval(() => this.updateValues(), 10000);
+    this.updateValues();
+    setInterval(() => this.updateValues(), 30000);
   }
 
   updateValues() {
-    this.getCurrentPower((err, watts) => {
-      if (!err) {
-        this.currentConsumption.updateValue(watts);
-        this.historyService.addEntry({ watts: watts, kilowatts: watts / 1000 });
-      }
-    });
+    this.getShellyData()
+      .then((data) => {
+        if (!data || !data.emeters) return;
 
-    this.getTotalEnergy((err, kWh) => {
-      if (!err) this.totalConsumption.updateValue(kWh);
-    });
+        const emeter = data.emeters[0];
+        const power = emeter.power || 0;
+        const total = (emeter.total || 0) / 1000; // Wh → kWh
+        const voltage = emeter.voltage || 0;
 
-    this.getVoltage((err, volts) => {
-      if (!err) this.voltage.updateValue(volts);
-    });
+        this.currentConsumption.updateValue(power);
+        this.totalConsumption.updateValue(total);
+        this.voltage.updateValue(voltage);
+
+        this.loggingService.addEntry({
+          time: Math.round(new Date().valueOf() / 1000),
+          power: power,
+        });
+
+        this.log(
+          `Updated ${this.device.name}: ${power} W, ${total} kWh, ${voltage} V`
+        );
+      })
+      .catch((err) => {
+        this.log.error(`Error updating ${this.device.name}: ${err.message}`);
+      });
   }
 
-  // Shelly EM integration
-  getCurrentPower(callback) {
-    const options = {
-      hostname: this.config.host,
-      port: 80,
-      path: '/status',
-      method: 'GET',
-      auth: this.config.auth ? `${this.config.auth.user}:${this.config.auth.pass}` : undefined
-    };
-
-    const req = http.request(options, res => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const watts = json.emeters[0].power;
-          callback(null, watts);
-        } catch (e) { callback(e); }
-      });
+  getShellyData() {
+    return new Promise((resolve, reject) => {
+      const url = `http://${this.device.host}/emeter/0`;
+      http
+        .get(url, (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch (err) {
+              reject(err);
+            }
+          });
+        })
+        .on("error", (err) => reject(err));
     });
-
-    req.on('error', e => callback(e));
-    req.end();
-  }
-
-  getTotalEnergy(callback) {
-    const options = {
-      hostname: this.config.host,
-      port: 80,
-      path: '/status',
-      method: 'GET',
-      auth: this.config.auth ? `${this.config.auth.user}:${this.config.auth.pass}` : undefined
-    };
-
-    const req = http.request(options, res => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const kWh = json.emeters[0].total / 1000; // Shelly returns Wh
-          callback(null, kWh);
-        } catch (e) { callback(e); }
-      });
-    });
-
-    req.on('error', e => callback(e));
-    req.end();
-  }
-
-  getVoltage(callback) {
-    const options = {
-      hostname: this.config.host,
-      port: 80,
-      path: '/status',
-      method: 'GET',
-      auth: this.config.auth ? `${this.config.auth.user}:${this.config.auth.pass}` : undefined
-    };
-
-    const req = http.request(options, res => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const volts = json.emeters[0].voltage;
-          callback(null, volts);
-        } catch (e) { callback(e); }
-      });
-    });
-
-    req.on('error', e => callback(e));
-    req.end();
   }
 }
