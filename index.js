@@ -1,171 +1,147 @@
 'use strict';
 
 const http = require('http');
-const https = require('https');
-const util = require('util');
-let Service, Characteristic, UUIDGen, FakeGatoHistoryService;
+const FakeGatoHistoryService = require('fakegato-history');
+
+let Service, Characteristic, UUIDGen;
 
 module.exports = (api) => {
   Service = api.hap.Service;
   Characteristic = api.hap.Characteristic;
   UUIDGen = api.hap.uuid;
 
-  // Eve custom characteristics
-  class EveCurrentConsumption extends Characteristic {
-    constructor() {
-      super('Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-      this.setProps({
+  class EnergyMeterPlatform {
+    constructor(log, config, api) {
+      this.log = log;
+      this.api = api;
+      this.config = config || {};
+      this.devices = this.config.devices || [];
+      this.accessories = [];
+
+      api.on('didFinishLaunching', () => {
+        this.discoverDevices();
+      });
+    }
+
+    discoverDevices() {
+      this.devices.forEach((device) => {
+        if (!device.host) {
+          this.log.error(`Device ${device.name || "Unnamed"} missing host`);
+          return;
+        }
+
+        const uuid = UUIDGen.generate(device.id || device.name);
+        let accessory = this.accessories.find((acc) => acc.UUID === uuid);
+
+        if (!accessory) {
+          this.log(`Creating new accessory for ${device.name}`);
+          accessory = new this.api.platformAccessory(device.name, uuid);
+
+          new EnergyMeterAccessory(this.log, accessory, device);
+
+          this.api.registerPlatformAccessories(
+            'homebridge-3em-energy-meter',
+            '3EMEnergyMeter',
+            [accessory]
+          );
+          this.accessories.push(accessory);
+        } else {
+          this.log(`Restoring accessory for ${device.name}`);
+          new EnergyMeterAccessory(this.log, accessory, device);
+        }
+      });
+    }
+  }
+
+  class EnergyMeterAccessory {
+    constructor(log, accessory, device) {
+      this.log = log;
+      this.accessory = accessory;
+      this.device = device;
+
+      // Accessory information
+      this.accessory.getService(Service.AccessoryInformation)
+        .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+        .setCharacteristic(Characteristic.Model, 'EM')
+        .setCharacteristic(Characteristic.SerialNumber, device.id);
+
+      // Outlet service
+      this.service = this.accessory.getService(Service.Outlet) || this.accessory.addService(Service.Outlet, device.name);
+
+      // Custom Eve characteristics
+      this.currentPower = this.service.addCharacteristic(new Characteristic('Current Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52'));
+      this.currentPower.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'W',
         perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
       });
-      this.value = this.getDefaultValue();
-    }
-  }
 
-  class EveTotalConsumption extends Characteristic {
-    constructor() {
-      super('Total Consumption', 'E863F11E-079E-48FF-8F27-9C2605A29F52');
-      this.setProps({
+      this.totalEnergy = this.service.addCharacteristic(new Characteristic('Total Consumption', 'E863F10F-079E-48FF-8F27-9C2605A29F52'));
+      this.totalEnergy.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'kWh',
         perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
       });
-      this.value = this.getDefaultValue();
-    }
-  }
 
-  class EveVoltage extends Characteristic {
-    constructor() {
-      super('Voltage', 'E863F129-079E-48FF-8F27-9C2605A29F52');
-      this.setProps({
+      this.voltage = this.service.addCharacteristic(new Characteristic('Voltage', 'E863F110-079E-48FF-8F27-9C2605A29F52'));
+      this.voltage.setProps({
         format: Characteristic.Formats.FLOAT,
         unit: 'V',
         perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
       });
-      this.value = this.getDefaultValue();
+
+      // FakeGato history
+      this.historyService = new FakeGatoHistoryService('energy', accessory, { storage: 'fs' });
+
+      this.startPolling();
+    }
+
+    startPolling() {
+      this.update();
+      setInterval(() => this.update(), 5000);
+    }
+
+    update() {
+      const options = {
+        host: this.device.host,
+        port: 80,
+        path: '/status',
+        method: 'GET',
+      };
+
+      const req = http.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            const em = json.emeters[0];
+            const power = em.power;
+            const total = em.total;
+            const voltage = em.voltage;
+
+            this.currentPower.updateValue(power);
+            this.totalEnergy.updateValue(total / 1000);
+            this.voltage.updateValue(voltage);
+
+            this.historyService.addEntry({
+              time: Math.floor(Date.now() / 1000),
+              energy: total / 1000,
+              power: power,
+            });
+          } catch (err) {
+            this.log.error('Error parsing Shelly EM data:', err.message);
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        this.log.error('HTTP request error:', err.message);
+      });
+
+      req.end();
     }
   }
 
-  // Initialize FakeGato
-  FakeGatoHistoryService = require('fakegato-history')(api);
-
-  // Register platform
   api.registerPlatform('homebridge-3em-energy-meter', '3EMEnergyMeter', EnergyMeterPlatform, true);
 };
-
-class EnergyMeterPlatform {
-  constructor(log, config = {}, api) {
-    this.log = log;
-    this.config = config;
-    this.api = api;
-    this.accessories = [];
-    this.devices = this.config.devices || [];
-
-    if (api) {
-      this.api.on('didFinishLaunching', () => {
-        this.discoverDevices();
-      });
-    }
-  }
-
-  discoverDevices() {
-    this.devices.forEach((device) => {
-      if (!device.host) {
-        this.log.error(`Device ${device.name || 'Unnamed'} missing host`);
-        return;
-      }
-
-      const uuid = UUIDGen.generate(device.id || device.name);
-      let accessory = this.accessories.find((acc) => acc.UUID === uuid);
-
-      if (!accessory) {
-        this.log(`Creating new accessory for ${device.name}`);
-        accessory = new this.api.platformAccessory(device.name, uuid);
-
-        new EnergyMeterAccessory(this.log, accessory, device, this.api);
-
-        this.api.registerPlatformAccessories(
-          'homebridge-3em-energy-meter',
-          '3EMEnergyMeter',
-          [accessory]
-        );
-        this.accessories.push(accessory);
-      } else {
-        this.log(`Restoring accessory for ${device.name}`);
-        new EnergyMeterAccessory(this.log, accessory, device, this.api);
-      }
-    });
-  }
-
-  configureAccessory(accessory) {
-    this.accessories.push(accessory);
-  }
-}
-
-class EnergyMeterAccessory {
-  constructor(log, accessory, device, api) {
-    this.log = log;
-    this.accessory = accessory;
-    this.device = device;
-    this.api = api;
-
-    this.service = accessory.getService(Service.Outlet) || accessory.addService(Service.Outlet, device.name);
-
-    this.service.getCharacteristic(Characteristic.On)
-      .onGet(this.getCurrentPower.bind(this));
-
-    this.service.addCharacteristic(new EveCurrentConsumption())
-      .onGet(this.getCurrentPower.bind(this));
-
-    this.service.addCharacteristic(new EveTotalConsumption())
-      .onGet(this.getTotalPower.bind(this));
-
-    this.service.addCharacteristic(new EveVoltage())
-      .onGet(this.getVoltage.bind(this));
-
-    this.fakegato = new FakeGatoHistoryService('energy', accessory, { storage: 'fs' });
-  }
-
-  getShellyJSON(path, callback) {
-    const url = `http://${this.device.host}/status${path}`;
-    http.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          callback(null, JSON.parse(data));
-        } catch (err) {
-          callback(err);
-        }
-      });
-    }).on('error', (err) => { callback(err); });
-  }
-
-  getCurrentPower() {
-    return new Promise((resolve, reject) => {
-      this.getShellyJSON('/emeter/0', (err, data) => {
-        if (err) return reject(err);
-        resolve(data.power || 0);
-      });
-    });
-  }
-
-  getTotalPower() {
-    return new Promise((resolve, reject) => {
-      this.getShellyJSON('/emeter/0', (err, data) => {
-        if (err) return reject(err);
-        resolve((data.total || 0) / 1000); // convert Wh -> kWh
-      });
-    });
-  }
-
-  getVoltage() {
-    return new Promise((resolve, reject) => {
-      this.getShellyJSON('/emeter/0', (err, data) => {
-        if (err) return reject(err);
-        resolve(data.voltage || 0);
-      });
-    });
-  }
-}

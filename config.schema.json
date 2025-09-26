@@ -1,58 +1,41 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "title": "3EM Energy Meter",
-  "description": "Platform for Shelly EM single-phase energy meters",
+  "title": "3EM Energy Meter Platform",
+  "description": "Configure the Shelly EM energy meters for Homebridge",
   "properties": {
-    "platforms": {
+    "name": {
+      "title": "Platform Name",
+      "type": "string",
+      "default": "3EMEnergyMeter",
+      "description": "The name of the platform shown in Homebridge"
+    },
+    "devices": {
+      "title": "Devices",
       "type": "array",
-      "title": "Platforms",
+      "description": "List of Shelly EM devices to monitor",
       "items": {
         "type": "object",
         "properties": {
-          "platform": {
+          "id": {
+            "title": "Device ID",
             "type": "string",
-            "default": "3EMEnergyMeter",
-            "description": "Platform type"
+            "description": "Unique ID for the device"
           },
           "name": {
+            "title": "Device Name",
             "type": "string",
-            "default": "3EMEnergyMeter",
-            "description": "Platform name",
-            "minLength": 1
+            "description": "Name of the accessory shown in HomeKit"
           },
-          "devices": {
-            "type": "array",
-            "title": "Devices",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "title": "Device ID",
-                  "description": "Unique identifier for this device",
-                  "minLength": 1
-                },
-                "name": {
-                  "type": "string",
-                  "title": "Device Name",
-                  "description": "Name of the device",
-                  "minLength": 1
-                },
-                "host": {
-                  "type": "string",
-                  "title": "Device Host",
-                  "description": "IP address of the Shelly EM",
-                  "format": "ipv4"
-                }
-              },
-              "required": ["id", "name", "host"]
-            }
+          "host": {
+            "title": "Device Host",
+            "type": "string",
+            "description": "IP address of the Shelly EM device",
+            "format": "ipv4"
           }
         },
-        "required": ["platform", "name", "devices"]
+        "required": ["id", "name", "host"]
       }
     }
   },
-  "required": ["platforms"]
+  "required": ["name", "devices"]
 }
