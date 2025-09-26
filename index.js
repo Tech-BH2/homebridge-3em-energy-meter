@@ -101,16 +101,16 @@ function EnergyMeter (log, config) {
 	inherits(EveAmpere1, Characteristic);
 
 	// Fixed PowerMeterService constructor for Homebridge 2.0 compatibility
-	class PowerMeterService extends Service {
-		constructor(displayName, subtype) {
-			super(displayName, '00000001-0000-1777-8000-775D67EC4377', subtype);
-			this.addCharacteristic(EvePowerConsumption);
-			this.addOptionalCharacteristic(EveTotalConsumption);
-			this.addOptionalCharacteristic(EveVoltage1);
-			this.addOptionalCharacteristic(EveAmpere1);
-		}
-	}
-	PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
+	var PowerMeterService = function (displayName, subtype) {
+    // Use Service.apply instead of Service.call
+    Service.apply(this, [displayName, '00000001-0000-1777-8000-775D67EC4377', subtype]);
+    this.addCharacteristic(EvePowerConsumption);
+    this.addOptionalCharacteristic(EveTotalConsumption);
+    this.addOptionalCharacteristic(EveVoltage1);
+    this.addOptionalCharacteristic(EveAmpere1);
+};
+PowerMeterService.UUID = '00000001-0000-1777-8000-775D67EC4377';
+inherits(PowerMeterService, Service);
 
 	// local vars
 	this._EvePowerConsumption = EvePowerConsumption;
