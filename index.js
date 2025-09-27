@@ -7,20 +7,6 @@ const version = require('./package.json').version;
 let Service, Characteristic, FakeGatoHistoryService;
 let EvePowerConsumption, EveTotalConsumption, EveVoltage;
 
-// Ensure Eve characteristics exist
-if (!global.EvePowerConsumption) {
-    global.EvePowerConsumption = Characteristic.EvePowerConsumption ||
-        new Characteristic('Power Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-}
-if (!global.EveTotalConsumption) {
-    global.EveTotalConsumption = Characteristic.EveTotalConsumption ||
-        new Characteristic('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-}
-if (!global.EveVoltage) {
-    global.EveVoltage = Characteristic.EveVoltage ||
-        new Characteristic('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
-}
-
 module.exports = (api) => {
   Service = api.hap.Service;
   Characteristic = api.hap.Characteristic;
@@ -135,6 +121,18 @@ function createInstance(log, config, api) {
 // --- (Below is essentially original code for EnergyChannel, EnergyOnly, & EnergyMeter) --- //
 
 function EnergyChannel(log, config, api) {
+  const Characteristic = api.hap.Characteristic;
+
+// Initialize Eve characteristics if not already defined
+if (!global.EvePowerConsumption) {
+    global.EvePowerConsumption = new Characteristic('Power Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+}
+if (!global.EveTotalConsumption) {
+    global.EveTotalConsumption = new Characteristic('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+}
+if (!global.EveVoltage) {
+    global.EveVoltage = new Characteristic('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+}
   this.log = log;
   this.ip = config["ip"] || "127.0.0.1";
   this.url = "http://" + this.ip + "/status/emeters?";
@@ -184,19 +182,6 @@ function EnergyChannel(log, config, api) {
   } catch (e) {
     this.log('EnergyChannel initial poll failed: ' + e.message);
   }
-}
-// Ensure Eve characteristics exist
-if (!global.EvePowerConsumption) {
-    global.EvePowerConsumption = Characteristic.EvePowerConsumption ||
-        new Characteristic('Power Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
-}
-if (!global.EveTotalConsumption) {
-    global.EveTotalConsumption = Characteristic.EveTotalConsumption ||
-        new Characteristic('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
-}
-if (!global.EveVoltage) {
-    global.EveVoltage = Characteristic.EveVoltage ||
-        new Characteristic('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
 }
 
 EnergyChannel.prototype.getServices = function () {
