@@ -176,68 +176,35 @@ EnergyChannel.prototype.getServices = function () {
   return [this.informationService, this.service, this.historyService];
 };
 
-EnergyChannel.prototype.updateState = function () {
-  const ops = {
-    uri: this.url,
-    method: this.http_method,
-    timeout: this.timeout
-  };
-  if (this.auth) ops.auth = { user: this.auth.user, pass: this.auth.pass };
-
-  if (this.debug_log) this.log('EnergyChannel: requesting ' + this.url + ' (ch=' + this.channelIndex + ')');
-
-  request(ops, (error, res, body) => {
-    if (error) {
-      this.log('EnergyChannel Bad http response: ' + error.message);
-      return;
-    }
-    try {
-      const json = JSON.parse(body);
-      if (Array.isArray(json.emeters) && json.emeters.length > this.channelIndex) {
-        const ch = json.emeters[this.channelIndex];
-        this.powerConsumption = parseFloat(ch.power || 0);
-        this.totalPowerConsumption = (parseFloat(ch.total || 0) / 1000);
-        this.voltage1 = parseFloat(ch.voltage || 0);
-      }
-      if (this.debug_log) this.log('EnergyChannel successful: ch=' + this.channelIndex + ' power=' + this.powerConsumption + ' total=' + this.totalPowerConsumption + ' V=' + this.voltage1);
-
-      if (this.service) {
-        try {
-          const p = this.service.getCharacteristic(EvePowerConsumption);
-          const t = this.service.getCharacteristic(EveTotalConsumption);
-          const v = this.service.getCharacteristic(EveVoltage);
-
-          if (p) {
-            const valP = Math.round(this.powerConsumption);
-            this.service.updateCharacteristic(p, valP);
-            p.setValue(valP);
-          }
-          if (t) {
-            const valT = Number(this.totalPowerConsumption);
-            this.service.updateCharacteristic(t, valT);
-            t.setValue(valT);
-          }
-          if (v) {
-            const valV = Number(this.voltage1);
-            this.service.updateCharacteristic(v, valV);
-            v.setValue(valV);
-          }
-        } catch (e) {
-          this.log('EnergyChannel char update error: ' + e.message);
+EnergyChannel.prototype.updateState = function (json) {
+    if (Array.isArray(json.emeters) && json.emeters.length > 0) {
+        const ch = json.emeters[this.channelIndex] || json.emeters[0];
+        if (ch) {
+            this.powerConsumption = parseFloat(ch.power || 0);
+            this.totalPowerConsumption = (parseFloat(ch.total || 0) / 1000);
+            this.voltage1 = parseFloat(ch.voltage || 0);
+        } else {
+            this.powerConsumption = 0;
+            this.totalPowerConsumption = 0;
+            this.voltage1 = 0;
         }
-      }
-
-      if (this.historyService) {
-        this.historyService.addEntry({
-          time: Math.round(new Date().valueOf() / 1000),
-          power: this.powerConsumption
-        });
-        if (this.debug_log) this.log('EnergyChannel FakeGato addEntry power=' + this.powerConsumption);
-      }
-    } catch (e) {
-      this.log('EnergyChannel parse error: ' + e.message);
     }
-  });
+
+    if (this.evePowerChar) this.evePowerChar.updateValue(this.powerConsumption);
+    if (this.eveTotalChar) this.eveTotalChar.updateValue(this.totalPowerConsumption);
+    if (this.eveVoltageChar) this.eveVoltageChar.updateValue(this.voltage1);
+
+    if (this.historyService) {
+        this.historyService.addEntry({
+            time: Math.floor(new Date().getTime() / 1000),
+            power: this.powerConsumption,
+            totalPower: this.totalPowerConsumption
+        });
+    }
+
+    if (this.debug_log) {
+        this.log(`[${this.name}] Power: ${this.powerConsumption} W, Total: ${this.totalPowerConsumption} kWh, Voltage: ${this.voltage1} V`);
+    }
 };
 
 
