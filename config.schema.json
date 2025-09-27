@@ -92,6 +92,22 @@
         "default": false,
         "required": true
         },
+  "add_channel_accessory": {
+  "title": "Add channel-specific accessory",
+  "type": "boolean",
+  "default": false,
+  "required": false,
+  "description": "If enabled, the plugin will expose an additional accessory that reports a single channel's energy (useful to split channel 2)."
+  },
+  "channel": {
+  "title": "Channel for the additional accessory",
+  "type": "integer",
+  "default": 2,
+  "required": false,
+  "minimum": 1,
+  "maximum": 3,
+  "description": "Select the emeter channel to expose in the additional accessory (1-based)."
+  },
         "serial": {
         "title": "Shelly 3EM Device Serial",
         "type": "string",
