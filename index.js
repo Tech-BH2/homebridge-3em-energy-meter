@@ -185,6 +185,19 @@ function EnergyChannel(log, config, api) {
     this.log('EnergyChannel initial poll failed: ' + e.message);
   }
 }
+// Ensure Eve characteristics exist
+if (!global.EvePowerConsumption) {
+    global.EvePowerConsumption = Characteristic.EvePowerConsumption ||
+        new Characteristic('Power Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+}
+if (!global.EveTotalConsumption) {
+    global.EveTotalConsumption = Characteristic.EveTotalConsumption ||
+        new Characteristic('Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+}
+if (!global.EveVoltage) {
+    global.EveVoltage = Characteristic.EveVoltage ||
+        new Characteristic('Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+}
 
 EnergyChannel.prototype.getServices = function () {
   return [this.informationService, this.service, this.historyService];
