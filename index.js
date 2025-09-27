@@ -184,38 +184,58 @@ if (!global.EveVoltage) {
   }
 }
 
-EnergyChannel.prototype.getServices = function () {
-  return [this.informationService, this.service, this.historyService];
+EnergyChannel.prototype.getServices = function() {
+    const Service = this.api.hap.Service;
+    const Characteristic = this.api.hap.Characteristic;
+
+    // Create accessory information service
+    const informationService = new Service.AccessoryInformation();
+    informationService
+        .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+        .setCharacteristic(Characteristic.Model, '3EM')
+        .setCharacteristic(Characteristic.SerialNumber, this.config.serial);
+
+    // Main power service
+    this.service = new Service.Outlet(this.config.name);
+
+    // Assign Eve characteristics to this service
+    this.evePowerChar = this.service.getCharacteristic(global.EvePowerConsumption) ||
+                        this.service.addCharacteristic(global.EvePowerConsumption);
+    this.eveTotalChar = this.service.getCharacteristic(global.EveTotalConsumption) ||
+                        this.service.addCharacteristic(global.EveTotalConsumption);
+    this.eveVoltageChar = this.service.getCharacteristic(global.EveVoltage) ||
+                          this.service.addCharacteristic(global.EveVoltage);
+
+    // Return services
+    return [informationService, this.service];
 };
 
-EnergyChannel.prototype.updateState = function (json) {
-    if (Array.isArray(json.emeters) && json.emeters.length > 0) {
-        const ch = json.emeters[this.channelIndex] || json.emeters[0];
-        if (ch) {
-            this.powerConsumption = parseFloat(ch.power || 0);
-            this.totalPowerConsumption = (parseFloat(ch.total || 0) / 1000);
-            this.voltage1 = parseFloat(ch.voltage || 0);
-        } else {
-            this.powerConsumption = 0;
-            this.totalPowerConsumption = 0;
-            this.voltage1 = 0;
-        }
+EnergyChannel.prototype.updateState = function(json) {
+    if (!json || !Array.isArray(json.emeters) || json.emeters.length === 0) {
+        this.log('No emeter data available');
+        return;
     }
 
+    // Use configured channel, fallback to first channel if missing
+    const ch = json.emeters[this.config.channel - 1] || json.emeters[0];
+
+    // Safely parse values
+    this.powerConsumption = parseFloat(ch.power || 0);
+    this.totalPowerConsumption = parseFloat(ch.total || 0) / 1000;
+    this.voltage1 = parseFloat(ch.voltage || 0);
+
+    // Update Eve characteristics only if they exist
     if (this.evePowerChar) this.evePowerChar.updateValue(this.powerConsumption);
     if (this.eveTotalChar) this.eveTotalChar.updateValue(this.totalPowerConsumption);
     if (this.eveVoltageChar) this.eveVoltageChar.updateValue(this.voltage1);
 
+    // Add to FakeGato history if configured
     if (this.historyService) {
         this.historyService.addEntry({
-            time: Math.floor(new Date().getTime() / 1000),
+            time: Math.floor(Date.now() / 1000),
             power: this.powerConsumption,
             totalPower: this.totalPowerConsumption
         });
-    }
-
-    if (this.debug_log) {
-        this.log(`[${this.name}] Power: ${this.powerConsumption} W, Total: ${this.totalPowerConsumption} kWh, Voltage: ${this.voltage1} V`);
     }
 };
 
