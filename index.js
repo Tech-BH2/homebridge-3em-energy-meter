@@ -211,40 +211,37 @@ EnergyChannel.prototype.getServices = function() {
 };
 
 EnergyChannel.prototype.updateState = function(json) {
-   // Safely select channel
-let ch = null;
-if (Array.isArray(json.emeters) && json.emeters.length > 0) {
-    ch = json.emeters[(this.config.channel || 1) - 1] || json.emeters[0];
-}
+    if (!json || !Array.isArray(json.emeters) || json.emeters.length === 0) {
+        this.log('No emeter data available');
+        this.powerConsumption = 0;
+        this.totalPowerConsumption = 0;
+        this.voltage1 = 0;
+        return;
+    }
 
-if (!ch) {
-    this.log('No valid emeter data found');
-    this.powerConsumption = 0;
-    this.totalPowerConsumption = 0;
-    this.voltage1 = 0;
-    return;
-}
+    // Safely select channel (configured channel or fallback to first)
+    const channelIndex = (this.config.channel ? this.config.channel - 1 : 0);
+    const ch = json.emeters[channelIndex] || json.emeters[0];
 
-// Parse numeric values safely
-this.powerConsumption = parseFloat(ch.power || 0);
-this.totalPowerConsumption = parseFloat(ch.total || 0) / 1000;
-this.voltage1 = parseFloat(ch.voltage || 0);
+    // Safely parse numeric values
+    this.powerConsumption = parseFloat(ch.power || 0);
+    this.totalPowerConsumption = parseFloat(ch.total || 0) / 1000; // kWh
+    this.voltage1 = parseFloat(ch.voltage || 0);
 
-// Update Eve characteristics if they exist
-if (this.evePowerChar) this.evePowerChar.updateValue(this.powerConsumption);
-if (this.eveTotalChar) this.eveTotalChar.updateValue(this.totalPowerConsumption);
-if (this.eveVoltageChar) this.eveVoltageChar.updateValue(this.voltage1);
+    // Update Eve characteristics if assigned
+    if (this.evePowerChar) this.evePowerChar.updateValue(this.powerConsumption);
+    if (this.eveTotalChar) this.eveTotalChar.updateValue(this.totalPowerConsumption);
+    if (this.eveVoltageChar) this.eveVoltageChar.updateValue(this.voltage1);
 
-// Add to FakeGato history
-if (this.historyService) {
-    this.historyService.addEntry({
-        time: Math.floor(Date.now() / 1000),
-        power: this.powerConsumption,
-        totalPower: this.totalPowerConsumption
-    });
-}
+    // Add entry to FakeGato history if configured
+    if (this.historyService) {
+        this.historyService.addEntry({
+            time: Math.floor(Date.now() / 1000),
+            power: this.powerConsumption,
+            totalPower: this.totalPowerConsumption
+        });
+    }
 };
-
 
 
 function EnergyOnly(log, config, api) {
