@@ -368,38 +368,82 @@ function EnergyMeter(log, config, api) {
   this.log = log;
   this.ip = config["ip"] || "127.0.0.1";
   this.url = "http://" + this.ip + "/status/emeters?";
-  this.auth = config["auth"];
-  this.name = config["name"];
-  this.displayName = config["name"];
+  this.name = config["name"] || "Shelly 3EM";
   this.timeout = config["timeout"] || 5000;
-  this.http_method = "GET";
   this.update_interval = Number(config["update_interval"] || 10000);
-  this.use_em = config["use_em"] || false;
-  this.use_em_mode = config["use_em_mode"] || 0;
-  this.negative_handling_mode = config["negative_handling_mode"] || 0;
-  this.use_pf = config["use_pf"] || false;
   this.debug_log = config["debug_log"] || false;
   this.serial = config.serial || "9000000";
 
   this.waiting_response = false;
-  this.powerConsumption = 0;
-  this.totalPowerConsumption = 0;
-  this.voltage1 = 0;
-  this.ampere1 = 0;
-  this.pf0 = 1;
-  this.pf1 = 1;
-  this.pf2 = 1;
+  this.services = []; // array of services for each channel
 
+  // Accessory information
+  this.informationService = new Service.AccessoryInformation();
+  this.informationService
+    .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+    .setCharacteristic(Characteristic.Model, '3EM')
+    .setCharacteristic(Characteristic.SerialNumber, this.serial)
+    .setCharacteristic(Characteristic.FirmwareRevision, version || '1.0.0');
+
+  // Create 3 Lightbulb services, one per channel
+  for (let chIndex = 0; chIndex < 3; chIndex++) {
+    const serviceName = `${this.name} - CH${chIndex + 1}`;
+    const service = new Service.Lightbulb(serviceName);
+    
+    service.addCharacteristic(EvePowerConsumption);
+    service.addCharacteristic(EveTotalConsumption);
+    service.addCharacteristic(EveVoltage);
+
+    this.services.push(service);
+  }
+
+  // Periodic update
   setInterval(() => {
-    this.updateState && this.updateState();
+    this.updateState();
   }, this.update_interval);
 
-  try {
-    this.updateState && this.updateState();
-  } catch (e) {
-    this.log('Initial updateState failed: ' + e.message);
-  }
+  this.updateState();
 }
+
+// Return all services
+EnergyMeter.prototype.getServices = function () {
+  return [this.informationService, ...this.services];
+};
+
+// Update all channels
+EnergyMeter.prototype.updateState = function () {
+  if (this.waiting_response) return;
+  this.waiting_response = true;
+
+  request({ uri: this.url, method: 'GET', timeout: this.timeout }, (error, res, body) => {
+    if (error) {
+      this.log('Error fetching Shelly data: ' + error.message);
+      this.waiting_response = false;
+      return;
+    }
+
+    try {
+      const json = JSON.parse(body);
+      if (!json.emeters || !Array.isArray(json.emeters)) {
+        this.waiting_response = false;
+        return;
+      }
+
+      json.emeters.forEach((ch, index) => {
+        const service = this.services[index];
+        if (!service) return;
+
+        service.getCharacteristic(EvePowerConsumption).updateValue(Math.round(ch.power || 0));
+        service.getCharacteristic(EveTotalConsumption).updateValue((ch.total || 0) / 1000);
+        service.getCharacteristic(EveVoltage).updateValue(ch.voltage || 0);
+      });
+
+    } catch (e) {
+      this.log('Failed parsing Shelly data: ' + e.message);
+    }
+    this.waiting_response = false;
+  });
+};
 
 EnergyMeter.prototype.getServices = function () {
   const informationService = new Service.AccessoryInformation();
