@@ -385,8 +385,8 @@ function EnergyMeter(log, config, api) {
     .setCharacteristic(Characteristic.SerialNumber, this.serial)
     .setCharacteristic(Characteristic.FirmwareRevision, version || '1.0.0');
 
-  // Create 3 Lightbulb services, one per channel
-  for (let chIndex = 0; chIndex < 3; chIndex++) {
+  // Create 2 Lightbulb services, one per channel
+  for (let chIndex = 1; chIndex < 3; chIndex++) {
     const serviceName = `${this.name} - CH${chIndex + 1}`;
     const service = new Service.Lightbulb(serviceName);
     
